@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=police_db
+      - POSTGRES_USER=police_user
+      - POSTGRES_PASSWORD=secret_password
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DB_NAME=police_db
+      - DB_USER=police_user
+      - DB_PASSWORD=secret_password
+      - DB_HOST=db
+
+volumes:
+  postgres_data:
