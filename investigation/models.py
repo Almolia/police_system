@@ -39,9 +39,6 @@ class Suspect(models.Model):
         db_index=True,
     )
 
-    # ── PERFORMANCE FIELD (The Fix) ──────────────────────────────────────
-    # We store the calculated score here so we can do: 
-    # Suspect.objects.order_by('-cached_ranking_score')
     cached_ranking_score = models.BigIntegerField(default=0, db_index=True)
 
     def __str__(self):
