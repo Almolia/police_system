@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-from django.db.models import Max, Q
+from django.db.models import Max, Min
 
 # ═══════════════════════════════════════════════════════════════
 # 1. SUSPECTS (The Criminals)
@@ -10,7 +10,6 @@ from django.db.models import Max, Q
 class Suspect(models.Model):
     """
     A person suspected of a crime.
-    Includes the 'Most Wanted' calculation logic.
     """
     class SuspectStatus(models.TextChoices):
         UNDER_SURVEILLANCE = "UNDER_SURVEILLANCE", "Under Surveillance"
@@ -20,15 +19,13 @@ class Suspect(models.Model):
         CONVICTED          = "CONVICTED",          "Convicted"
         ACQUITTED          = "ACQUITTED",          "Acquitted"
 
-    # Link to a registered user (if they exist in system)
+    # Identity
     profile = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
         on_delete=models.SET_NULL,
         related_name="criminal_record"
     )
-    
-    # Text alias for unregistered people
     alias = models.CharField(
         max_length=255, 
         blank=True, 
@@ -42,57 +39,60 @@ class Suspect(models.Model):
         db_index=True,
     )
 
+    # ── PERFORMANCE FIELD (The Fix) ──────────────────────────────────────
+    # We store the calculated score here so we can do: 
+    # Suspect.objects.order_by('-cached_ranking_score')
+    cached_ranking_score = models.BigIntegerField(default=0, db_index=True)
+
     def __str__(self):
         return self.profile.get_full_name() if self.profile else self.alias
 
     # ─── MATH & LOGIC ────────────────────────────────────────────────
-
-    def max_crime_level(self) -> int:
+    
+    def calculate_metrics(self):
         """
-        max(Di): Highest crime level integer (1-4) across ALL cases ever associated.
+        Runs the heavy math and updates the cached_ranking_score.
+        Call this method whenever a Case is added or closed.
         """
-        # We look at the 'interrogations' link to find related cases
-        result = self.interrogations.aggregate(
-            max_level=models.Max("case__crime_level")
+        # 1. Calculate Max Crime Level (Di)
+        # Note: We must handle cases where crime_level might be None or 0
+        agg_level = self.interrogations.aggregate(
+            max_val=Max("case__crime_level")
         )
-        return result["max_level"] or 0
+        max_di = agg_level["max_val"] or 0
 
-    def max_days_in_open_case(self) -> int:
-        """
-        max(Lj): The longest number of days this suspect has been in an ACTIVE case.
-        """
-        # 1. Find all interrogations where the case is NOT closed/voided
+        # 2. Calculate Max Days Open (Lj)
         active_interrogations = self.interrogations.exclude(
             case__status__in=['CLOSED_VERDICT', 'CLOSED_REJECTED', 'VOIDED']
         )
         
-        if not active_interrogations.exists():
-            return 0
+        agg_date = active_interrogations.aggregate(
+            oldest=Min('case__created_at')
+        )
+        oldest_date = agg_date['oldest']
 
-        # 2. Find the oldest 'created_at' among these active cases
-        oldest_case_date = active_interrogations.aggregate(
-            oldest=models.Min('case__created_at')
-        )['oldest']
+        if oldest_date:
+            max_lj = (timezone.now() - oldest_date).days
+        else:
+            max_lj = 0
 
-        if not oldest_case_date:
-            return 0
+        # 3. Update the Cached Field
+        self.cached_ranking_score = max_lj * max_di
+        
+        # 4. Auto-update Status to "Most Wanted" if Lj > 30 days
+        if max_lj > 30 and self.status == self.SuspectStatus.UNDER_SURVEILLANCE:
+            self.status = self.SuspectStatus.MOST_WANTED
+            
+        self.save()
+        return self.cached_ranking_score
 
-        # 3. Calculate difference from NOW
-        delta = timezone.now() - oldest_case_date
-        return delta.days
-
-    def ranking_score(self) -> int:
-        """
-        Formula: max(Lj) * max(Di)
-        Used for sorting the 'Most Wanted' leaderboard.
-        """
-        return self.max_days_in_open_case() * self.max_crime_level()
-
+    @property
     def reward_amount(self) -> int:
         """
         Formula: Score * 20,000,000 Rials
+        Uses the cached score for instant results.
         """
-        return self.ranking_score() * 20_000_000
+        return self.cached_ranking_score * 20_000_000
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -101,7 +101,6 @@ class Suspect(models.Model):
 class Interrogation(models.Model):
     """
     Links a Suspect to a specific Case.
-    Holds the process data: Scores, Verdicts, Bail.
     """
     case = models.ForeignKey(
         "cases.Case", 
@@ -114,7 +113,7 @@ class Interrogation(models.Model):
         related_name="interrogations"
     )
 
-    # ── Phase 1: Scoring ──
+    # Phase 1: Scoring
     detective_score = models.PositiveSmallIntegerField(
         null=True, blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(10)],
@@ -125,18 +124,13 @@ class Interrogation(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(10)]
     )
 
-    # ── Phase 2: Verdicts ──
-    # Sergeant approves suspect for arrest?
+    # Phase 2: Verdicts
     sergeant_approval = models.BooleanField(null=True, blank=True)
     sergeant_notes = models.TextField(blank=True)
-
-    # Captain Final Verdict
     captain_verdict = models.BooleanField(null=True, blank=True)
-    
-    # Chief (Only for Critical Cases)
     chief_verdict = models.BooleanField(null=True, blank=True)
 
-    # ── Phase 3: Bail ──
+    # Phase 3: Bail
     bail_amount = models.DecimalField(
         max_digits=15, decimal_places=0, 
         null=True, blank=True,
@@ -148,38 +142,32 @@ class Interrogation(models.Model):
 
     class Meta:
         unique_together = ("case", "suspect")
-    
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Trigger an update on the suspect whenever an interrogation is changed
+        self.suspect.calculate_metrics()
+
     def __str__(self):
         return f"{self.suspect} in Case #{self.case.id}"
 
 
 # ═══════════════════════════════════════════════════════════════
-# 3. DETECTIVE BOARD
+# 3. DETECTIVE BOARD (Unchanged - Your code was good)
 # ═══════════════════════════════════════════════════════════════
 class BoardNode(models.Model):
-    """
-    Items on the drag-and-drop board (Evidence or Notes).
-    """
     case = models.ForeignKey("cases.Case", on_delete=models.CASCADE, related_name="board_nodes")
-    
-    # Can link to real evidence OR just be text
     linked_evidence = models.ForeignKey(
         "evidence.Evidence",
         on_delete=models.CASCADE,
         null=True, blank=True
     )
     note_text = models.TextField(blank=True, null=True)
-    
-    # Coordinates
     x_position = models.FloatField(default=0.0)
     y_position = models.FloatField(default=0.0)
     color = models.CharField(max_length=20, default="#ffeb3b")
 
-
 class BoardConnection(models.Model):
-    """
-    Red lines connecting nodes.
-    """
     case = models.ForeignKey("cases.Case", on_delete=models.CASCADE)
     from_node = models.ForeignKey(BoardNode, related_name="outgoing", on_delete=models.CASCADE)
     to_node = models.ForeignKey(BoardNode, related_name="incoming", on_delete=models.CASCADE)
