@@ -44,7 +44,21 @@ INSTALLED_APPS = [
     "investigation",
     "legal",
     "stats",
+    'drf_spectacular',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Police Investigation API',
+    'DESCRIPTION': 'API documentation for the Police Hierarchy and Case Management System.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -133,3 +147,5 @@ AUTHENTICATION_BACKENDS = [
     'accounts.backends.MultiFieldBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
+
+AUTH_USER_MODEL = 'accounts.User'
