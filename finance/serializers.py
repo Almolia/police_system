@@ -21,7 +21,22 @@ class PoliceRewardReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
         fields = '__all__'
-        read_only_fields = ('citizen', 'suspect', 'description', 'unique_tracking_id', 'amount')
+        
+        # ── SECURITY: The Bouncer ──
+        # The officer can ONLY edit the 'status'. 
+        # Everything else is locked down so the original tip cannot be tampered with.
+        read_only_fields = (
+            'id', 
+            'citizen', 
+            'suspect', 
+            'description', 
+            'unique_tracking_id', 
+            'amount', 
+            'officer_reviewer',
+            'detective_approver', 
+            'created_at', 
+            'updated_at'
+        )
 
 
 # ═══════════════════════════════════════════════════════════════

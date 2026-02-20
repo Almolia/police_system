@@ -2,7 +2,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from .models import Reward, Transaction
-from .serializers import CitizenRewardSubmitSerializer, TransactionSerializer
+from accounts.permissions import IsPolicePersonnel
+from .serializers import CitizenRewardSubmitSerializer, TransactionSerializer, PoliceRewardReviewSerializer
 from accounts.permissions import IsCitizen
 import uuid
 
@@ -63,3 +64,23 @@ class InitiatePaymentView(generics.CreateAPIView):
             "authority": transaction.authority,
             "amount": transaction.amount
         }, status=status.HTTP_201_CREATED)
+
+# ═══════════════════════════════════════════════════════════════
+# 1B. REWARDS (Police Facing)
+# ═══════════════════════════════════════════════════════════════
+class ReviewTipView(generics.RetrieveUpdateAPIView):
+    """
+    Allows Police to read a citizen's tip and update its status 
+    (e.g., to VERIFIED or APPROVED).
+    """
+    queryset = Reward.objects.all()
+    serializer_class = PoliceRewardReviewSerializer
+    permission_classes = [IsPolicePersonnel]
+
+    @extend_schema(
+        summary="Review a Citizen Tip",
+        description="Police personnel can review a pending tip and change its status. The reviewing officer is automatically recorded."
+    )
+    def perform_update(self, serializer):
+        # Auto-record which officer reviewed this tip
+        reward = serializer.save(officer_reviewer=self.request.user)
