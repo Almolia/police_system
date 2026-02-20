@@ -25,8 +25,8 @@ class CitizenRegistrationView(generics.CreateAPIView):
     @extend_schema(
         summary="Register a new Citizen",
         description="""
-        Allows a member of the public to create an account. 
-        The system will **automatically** assign them the `CITIZEN` role.
+Allows a member of the public to create an account. 
+The system will **automatically** assign them the `CITIZEN` role.
         """,
         examples=[
             OpenApiExample(
@@ -67,8 +67,8 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     @extend_schema(
         summary="Get/Update My Profile",
         description="""
-        Fetches the profile of the currently authenticated user based on their JWT token.
-        Note: `national_id` and `role_name` cannot be changed by the user.
+Fetches the profile of the currently authenticated user based on their JWT token.
+Note: `national_id` and `role_name` cannot be changed by the user.
         """
     )
     def get(self, request, *args, **kwargs):
