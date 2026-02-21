@@ -3,79 +3,76 @@ from django.conf import settings
 import uuid
 
 # ═══════════════════════════════════════════════════════════════
-# 1. REWARDS (Suspect-Centric)
+# 1. REWARD (TIP) MODEL
 # ═══════════════════════════════════════════════════════════════
 class Reward(models.Model):
     """
-    Manages rewards for citizens who provide tips about a specific SUSPECT.
-    
-    The user selects a "Most Wanted" criminal and submits a tip.
-    Reward Amount = Suspect's Value * 20,000,000 Rials.
+    Handles Citizen tips. 
+    Flow: Citizen (PENDING) -> Officer (FORWARDED/REJECTED) -> Detective (APPROVED/REJECTED) -> Paid.
     """
-    class Status(models.TextChoices):
-        PENDING   = 'PENDING',   'Pending Officer Review'
-        VERIFIED  = 'VERIFIED',  'Verified by Officer'
-        APPROVED  = 'APPROVED',  'Approved by Detective (Ready for Payment)'
-        PAID      = 'PAID',      'Paid'
-        REJECTED  = 'REJECTED',  'Rejected'
+    class TipStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending Officer Review'
+        FORWARDED = 'FORWARDED', 'Forwarded to Detective'
+        APPROVED = 'APPROVED', 'Approved by Detective'
+        REJECTED = 'REJECTED', 'Rejected'
+        PAID = 'PAID', 'Reward Paid'
 
-    # The citizen claiming the reward
-    citizen = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='rewards'
-    )
+    citizen = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='submitted_tips')
     
-    suspect = models.ForeignKey(
-        'investigation.Suspect',
-        on_delete=models.CASCADE,
-        related_name='tips'
-    )
+    suspect = models.ForeignKey('investigation.Suspect', on_delete=models.SET_NULL, null=True, blank=True)
+    case = models.ForeignKey('cases.Case', on_delete=models.SET_NULL, null=True, blank=True)
     
-    description = models.TextField(help_text="Details of the tip (e.g. location, sighting)")
+    description = models.TextField()
+    status = models.CharField(max_length=20, choices=TipStatus.choices, default=TipStatus.PENDING)
     
-    # "A unique ID is given to them to go to the police station"
-    unique_tracking_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    unique_tracking_id = models.UUIDField(null=True, blank=True, unique=True)
+    amount = models.BigIntegerField(default=0)
     
-    # The calculated amount in Rials
-    amount = models.BigIntegerField(default=0, help_text="Calculated via Suspect Value * 20m")
-    
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    
-    # Audit trail
-    officer_reviewer = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name='reviewed_rewards'
-    )
-    detective_approver = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name='approved_rewards'
-    )
-    
+    officer_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_tips')
+    detective_approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_tips')
+
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def calculate_reward_amount(self):
         """
         Calculates and saves the reward amount based on the Suspect's value.
         Formula: (Suspect Ranking Score) * 20,000,000
         """
-        # 1. Get the pre-calculated score from the Suspect model
-        # This score is max(Lj) * max(Di)
-        base_score = self.suspect.cached_ranking_score
-        
-        # 2. Apply the money multiplier
-        # Example: Score 120 (Critical * 30 days) * 20m = 2,400,000,000 Rials
-        self.amount = base_score * 20_000_000
+        # Safety check: ensure a suspect was actually linked by the police
+        if self.suspect and self.suspect.cached_ranking_score:
+            base_score = self.suspect.cached_ranking_score
+            self.amount = base_score * 20_000_000
+        else:
+            self.amount = 0
+            
         self.save()
 
-    def __str__(self):
-        return f"Reward for {self.suspect} - {self.amount:,} Rials"
 
+# ═══════════════════════════════════════════════════════════════
+# 2. RELEASE REQUEST (BAIL / FINE) MODEL
+# ═══════════════════════════════════════════════════════════════
+class ReleaseRequest(models.Model):
+    """
+    Suspect/Lawyer requests release. Sergeant reviews and sets the amount.
+    """
+    class RequestStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending Sergeant Review'
+        APPROVED = 'APPROVED', 'Approved (Amounts Set)'
+        REJECTED = 'REJECTED', 'Rejected'
+        PAID = 'PAID', 'Paid and Released'
+
+    interrogation = models.ForeignKey('investigation.Interrogation', on_delete=models.CASCADE, related_name='release_requests')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    
+    status = models.CharField(max_length=20, choices=RequestStatus.choices, default=RequestStatus.PENDING)
+    
+    # Sergeant sets these
+    bail_amount = models.BigIntegerField(null=True, blank=True, help_text="Set by Sergeant for Suspects (Level 2/3)")
+    fine_amount = models.BigIntegerField(null=True, blank=True, help_text="Set by Sergeant for Criminals (Level 3)")
+    
+    sergeant_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_releases')
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
 # ═══════════════════════════════════════════════════════════════
 # 2. PAYMENTS (Bail & Fines)

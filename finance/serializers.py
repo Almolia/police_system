@@ -1,43 +1,90 @@
 from rest_framework import serializers
-from .models import Reward, Transaction
+from .models import Reward, Transaction, ReleaseRequest
+import uuid
 
 # ═══════════════════════════════════════════════════════════════
 # 1. REWARDS
 # ═══════════════════════════════════════════════════════════════
+# ─── TIPS / REWARDS ───
 class CitizenRewardSubmitSerializer(serializers.ModelSerializer):
     """
-    Used by public citizens to submit a tip about a Most Wanted suspect.
+    Used by Citizens to submit a tip.
+    Strictly locks down all financial and status fields so they cannot be tampered with.
     """
     class Meta:
         model = Reward
-        fields = ('id', 'suspect', 'description', 'unique_tracking_id', 'status', 'amount')
-        # The user can ONLY write to 'suspect' and 'description'
-        read_only_fields = ('id', 'unique_tracking_id', 'status', 'amount')
-
-class PoliceRewardReviewSerializer(serializers.ModelSerializer):
-    """
-    Used by Officers/Detectives to update the status of a tip.
-    """
-    class Meta:
-        model = Reward
-        fields = '__all__'
+        fields = (
+            'id', 
+            'description', 
+            'case',       # Optional: If the citizen knows which case it is
+            'suspect',    # Optional: If the citizen knows who the suspect is
+            'status', 
+            'amount', 
+            'created_at'
+        )
         
-        # ── SECURITY: The Bouncer ──
-        # The officer can ONLY edit the 'status'. 
-        # Everything else is locked down so the original tip cannot be tampered with.
+        # The citizen can ONLY write to 'description', 'case', and 'suspect'.
+        # The system and the police control everything else.
         read_only_fields = (
             'id', 
-            'citizen', 
-            'suspect', 
-            'description', 
-            'unique_tracking_id', 
+            'status', 
             'amount', 
-            'officer_reviewer',
-            'detective_approver', 
-            'created_at', 
-            'updated_at'
+            'created_at'
         )
 
+class OfficerTipReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reward
+        fields = ('id', 'status', 'case')
+        
+    def validate_status(self, value):
+        if value not in ['FORWARDED', 'REJECTED']:
+            raise serializers.ValidationError("Officer can only FORWARD or REJECT.")
+        return value
+
+class DetectiveTipApprovalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reward
+        fields = ('id', 'status') 
+        
+    def validate_status(self, value):
+        if value not in ['APPROVED', 'REJECTED']:
+            raise serializers.ValidationError("Detective can only APPROVE or REJECT.")
+        return value
+
+    def update(self, instance, validated_data):
+        new_status = validated_data.get('status')
+        
+        # Check if the Detective is approving it right now
+        is_newly_approved = (new_status == 'APPROVED' and instance.status != 'APPROVED')
+        
+        if is_newly_approved:
+            # 1. Generate the unique code for the citizen
+            instance.unique_tracking_id = uuid.uuid4()
+            
+        # 2. Let DRF save the new status and the UUID to the database
+        instance = super().update(instance, validated_data)
+
+        if is_newly_approved:
+            instance.calculate_reward_amount()
+
+        return instance
+
+# ─── BAIL / FINES ───
+class ReleaseRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReleaseRequest
+        fields = ('interrogation',)
+
+class SergeantReleaseReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReleaseRequest
+        fields = ('status', 'bail_amount', 'fine_amount')
+
+    def validate_status(self, value):
+        if value not in ['APPROVED', 'REJECTED']:
+            raise serializers.ValidationError("Sergeant can only APPROVE or REJECT.")
+        return value
 
 # ═══════════════════════════════════════════════════════════════
 # 2. TRANSACTIONS

@@ -9,6 +9,7 @@ from .serializers import (
     IDEvidenceSerializer, MiscEvidenceSerializer
 )
 
+@extend_schema(summary="List all evidence for a Case", tags=["Evidence"])
 class CaseEvidenceListView(generics.ListAPIView):
     """
     GET: List all evidence attached to a specific case.
@@ -16,7 +17,6 @@ class CaseEvidenceListView(generics.ListAPIView):
     serializer_class = EvidenceListSerializer
     permission_classes = [IsPolicePersonnel]
 
-    @extend_schema(summary="List all evidence for a Case")
     def get_queryset(self):
         case_id = self.kwargs.get('case_id')
         return Evidence.objects.filter(case_id=case_id).order_by('-created_at')
