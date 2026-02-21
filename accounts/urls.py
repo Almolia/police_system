@@ -6,7 +6,8 @@ from rest_framework_simplejwt.views import (
 from .views import (
     CitizenRegistrationView,
     UserProfileView,
-    StaffRegistrationView
+    StaffRegistrationView,
+    StaffListView,
 )
 
 app_name = 'accounts'
@@ -17,4 +18,5 @@ urlpatterns = [
     path('register/', CitizenRegistrationView.as_view(), name='citizen_register'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
     path('staff/register/', StaffRegistrationView.as_view(), name='staff_register'),
+    path('staff/', StaffListView.as_view(), name='staff_list'),
 ]

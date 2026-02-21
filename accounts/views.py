@@ -92,11 +92,55 @@ class StaffRegistrationView(generics.CreateAPIView):
     """
     queryset = User.objects.all()
     serializer_class = StaffCreationSerializer
-    permission_classes = [IsChief]  # Only the Chief can access this!
+    permission_classes = [IsChief]
 
     @extend_schema(
         summary="Register Police Staff (Chief Only)",
-        description="Allows the Chief of Police to create internal users (Detectives, Officers, etc.) and assign their roles directly.",
+        description=
+"""Allows the Chief of Police to create internal users (Detectives, Officers, etc.) and assign their roles directly.
+The role numbers are as follows:
+
+* 1 = Citizen (CITIZEN) => This role is NOT assignable through this endpoint. All staff must have a role of 2 or higher.
+
+* 2 = Police Cadet (CADET)
+
+* 3 = Police Officer (OFFICER)
+
+* 4 = Detective (DETECTIVE)
+
+* 5 = Sergeant (SERGEANT)
+
+* 6 = Captain (CAPTAIN)
+
+* 7 = Chief of Police (CHIEF)
+
+* 8 = Judge (JUDGE)""",
+                examples=[
+            OpenApiExample(
+                "Valid Staff Registration",
+                summary="Standard public signup",
+                value= {
+                    "national_id": "1234567890",
+                    "phone_number": "09121112222",
+                    "email": "officer.jim@police.ir",
+                    "first_name": "Jim",
+                    "last_name": "Gordon",
+                    "username": "jim_gordon",
+                    "password": "securepassword123",
+                    "password_confirm": "securepassword123",
+                    "role": 3 
+},
+                request_only=True,
+            )
+        ],
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+
+class StaffListView(generics.ListAPIView):
+    """
+    GET: List all staff members.
+    """
+    queryset = User.objects.exclude(role__codename='CITIZEN').select_related('role')
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsChief]

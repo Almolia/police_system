@@ -68,7 +68,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         
         return user
 
-
 # ═══════════════════════════════════════════════════════════════
 # 2. PROFILE VIEWING & EDITING
 # ═══════════════════════════════════════════════════════════════
@@ -86,33 +85,43 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'email', 'phone_number', 'national_id', 'role_name'
         )
         read_only_fields = ('id', 'username', 'national_id', 'role_name')
-
+    
+    def validate_phone_number(self, value):
+        """Basic validation for Iranian phone numbers."""
+        if not value.isdigit():
+            raise serializers.ValidationError("Phone number must contain only digits.")
+    
+        if not value.startswith('09') or len(value) != 11:
+            raise serializers.ValidationError("Phone number must start with '09' and be 11 digits long.")
+            
+        return value
 
 # ═══════════════════════════════════════════════════════════════
 # 3. STAFF CREATION (For Chief / Admin)
 # ═══════════════════════════════════════════════════════════════
-class StaffCreationSerializer(serializers.ModelSerializer):
+class StaffCreationSerializer(UserRegistrationSerializer):
     """
-    Used strictly by the Chief of Police or System Admins to create internal staff 
-    (Cadets, Officers, Detectives, etc.). Allows setting the Role directly.
+    Inherits ALL the validation rules from UserRegistrationSerializer!
+    We just add the 'role' field so the Chief can select Officer, Judge, etc.
     """
-    class Meta:
-        model = User
-        fields = (
-            'national_id', 'phone_number', 'email', 
-            'first_name', 'last_name', 'username', 
-            'password', 'role'
-        )
-        extra_kwargs = {'password': {'write_only': True}}
+    role = serializers.PrimaryKeyRelatedField(
+        # Don't let Chief create citizens here
+        queryset=Role.objects.exclude(codename='CITIZEN') 
+    )
+
+    class Meta(UserRegistrationSerializer.Meta):
+        # We take the base fields and just add 'role'
+        fields = UserRegistrationSerializer.Meta.fields + ('role',)
 
     def create(self, validated_data):
-        # We extract the role first
-        role = validated_data.pop('role', None)
+        validated_data.pop('password_confirm')
+        role = validated_data.pop('role')
         
+        # Create the user natively
         user = User.objects.create_user(**validated_data)
         
-        if role:
-            user.role = role
-            user.save()
-            
+        # Override the default Citizen role with the one the Chief selected
+        user.role = role
+        user.save()
+        
         return user
