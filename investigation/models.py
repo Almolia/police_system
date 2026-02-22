@@ -69,7 +69,7 @@ class Suspect(models.Model):
         oldest_date = agg_date['oldest']
 
         if oldest_date:
-            max_lj = (timezone.now() - oldest_date).days
+            max_lj = max(1, (timezone.now() - oldest_date).days) 
         else:
             max_lj = 0
 
@@ -80,7 +80,7 @@ class Suspect(models.Model):
         if max_lj > 30 and self.status == self.SuspectStatus.UNDER_SURVEILLANCE:
             self.status = self.SuspectStatus.MOST_WANTED
             
-        self.save()
+        self.save(update_fields=['cached_ranking_score', 'status'])
         return self.cached_ranking_score
 
     @property
