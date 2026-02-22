@@ -1,10 +1,9 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import CourtVerdictViewSet
+from django.urls import path
+from .views import CourtVerdictListCreateView, CourtVerdictDetailView
 
-router = DefaultRouter()
-router.register(r'verdicts', CourtVerdictViewSet, basename='verdict')
+app_name = 'legal'
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('verdicts/', CourtVerdictListCreateView.as_view(), name='verdict-list-create'),
+    path('verdicts/<int:pk>/', CourtVerdictDetailView.as_view(), name='verdict-detail'),
 ]
