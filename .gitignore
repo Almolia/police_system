@@ -4,3 +4,8 @@ __pycache__/
 db.sqlite3
 .env
 .DS_Store
+
+
+police_system_front/node_modules/
+police_system_front/dist/
+police_system_front/.env
