@@ -35,7 +35,8 @@ class CitizenRewardSubmitSerializer(serializers.ModelSerializer):
 class OfficerTipReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
-        fields = ('id', 'status', 'case')
+        fields = ('id', 'status', 'unique_tracking_id', 'amount') 
+        read_only_fields = ('unique_tracking_id', 'amount')
         
     def validate_status(self, value):
         if value not in ['FORWARDED', 'REJECTED']:
@@ -45,7 +46,8 @@ class OfficerTipReviewSerializer(serializers.ModelSerializer):
 class DetectiveTipApprovalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
-        fields = ('id', 'status') 
+        fields = ('id', 'status', 'unique_tracking_id', 'amount') 
+        read_only_fields = ('unique_tracking_id', 'amount')
         
     def validate_status(self, value):
         if value not in ['APPROVED', 'REJECTED']:
@@ -54,27 +56,25 @@ class DetectiveTipApprovalSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         new_status = validated_data.get('status')
-        
-        # Check if the Detective is approving it right now
         is_newly_approved = (new_status == 'APPROVED' and instance.status != 'APPROVED')
         
         if is_newly_approved:
-            # 1. Generate the unique code for the citizen
             instance.unique_tracking_id = uuid.uuid4()
             
-        # 2. Let DRF save the new status and the UUID to the database
         instance = super().update(instance, validated_data)
 
         if is_newly_approved:
             instance.calculate_reward_amount()
+            instance.save()
 
         return instance
-
+    
 # ─── BAIL / FINES ───
 class ReleaseRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReleaseRequest
-        fields = ('interrogation',)
+        fields = ('id', 'interrogation', 'status')
+        read_only_fields = ('id', 'status') 
 
 class SergeantReleaseReviewSerializer(serializers.ModelSerializer):
     class Meta:
@@ -97,4 +97,4 @@ class TransactionSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = ('id', 'interrogation', 'transaction_type', 'amount', 'status', 'authority', 'ref_id')
         # Security: The user shouldn't be able to manually set their status to SUCCESS
-        read_only_fields = ('id', 'status', 'authority', 'ref_id')
+        read_only_fields = ('id', 'status', 'authority', 'ref_id', 'amount')

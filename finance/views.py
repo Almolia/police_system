@@ -1,3 +1,4 @@
+import requests
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -269,31 +270,54 @@ class InitiatePaymentView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        amount_in_rials = int(serializer.validated_data['amount']) * 10 
+        # 1. Get the interrogation and transaction type from the validated request
+        interrogation = serializer.validated_data.get('interrogation')
+        tx_type = serializer.validated_data.get('transaction_type')
+
+        # 2. SECURITY FIX: Look up the Sergeant's approved Release Request
+        try:
+            release_request = ReleaseRequest.objects.get(interrogation=interrogation, status='APPROVED')
+        except ReleaseRequest.DoesNotExist:
+            return Response({"error": "No approved release request found for this interrogation."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Determine the exact amount owed
+        if tx_type == 'BAIL':
+            real_amount = release_request.bail_amount
+        elif tx_type == 'FINE':
+            real_amount = release_request.fine_amount
+        else:
+            return Response({"error": "Invalid transaction type."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Make sure the Sergeant actually set an amount above 0
+        if not real_amount or real_amount <= 0:
+            return Response({"error": f"No {tx_type} amount has been set by the Sergeant."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Convert to Rials for ZarinPal
+        amount_in_rials = int(real_amount) * 10 
         
-        # 1. Request an Authority Code from ZarinPal
+        # 4. Request Authority Code from ZarinPal
         payload = {
             "merchant_id": ZARINPAL_MERCHANT_ID,
             "amount": amount_in_rials,
-            "description": f"Payment for Interrogation {serializer.validated_data.get('interrogation')}",
+            "description": f"Payment for Interrogation {interrogation.id}",
             "callback_url": CALLBACK_URL,
         }
         
         response = requests.post(ZARINPAL_REQUEST_URL, json=payload)
         res_data = response.json()
+        data = res_data.get('data')
         
-        # Check if ZarinPal accepted the request (Code 100 means success)
-        if 'data' in res_data and res_data['data']['code'] == 100:
-            authority = res_data['data']['authority']
+        if isinstance(data, dict) and data.get('code') == 100:
+            authority = data.get('authority')
             
-            # Save the PENDING transaction with the real Authority code
+            # Save the transaction, forcing the real_amount into the database
             transaction = serializer.save(
                 payer=request.user,
                 authority=authority,
-                status=Transaction.Status.PENDING # Assuming you have this defined in your model
+                amount=real_amount,
+                status=Transaction.Status.PENDING 
             )
             
-            # Return the exact URL the frontend needs to redirect the user to
             payment_url = f"{ZARINPAL_STARTPAY_URL}{authority}"
             
             return Response({
@@ -304,10 +328,9 @@ class InitiatePaymentView(generics.CreateAPIView):
             }, status=status.HTTP_201_CREATED)
             
         else:
-            # ZarinPal rejected our request (e.g., bad merchant ID, invalid amount)
             return Response({
                 "error": "Failed to initiate payment gateway.",
-                "details": res_data.get('errors')
+                "details": res_data.get('errors', 'Unknown ZarinPal Error')
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -377,9 +400,9 @@ class PaymentCallbackView(APIView):
         
         verify_res = requests.post(ZARINPAL_VERIFY_URL, json=verify_payload)
         verify_data = verify_res.json()
-        
+        data = verify_data.get('data')
         # Code 100 = Success, Code 101 = Already Verified
-        if 'data' in verify_data and verify_data['data']['code'] in [100, 101]:
+        if isinstance(data, dict) and data.get('code') == 100 or data.get('code') == 101:
             transaction.status = 'SUCCESS' 
             # ZarinPal gives us a real reference ID (e.g., for the receipt)
             transaction.ref_id = str(verify_data['data']['ref_id']) 
