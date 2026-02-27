@@ -1,4 +1,4 @@
-from rest_framework import generics
+from rest_framework import generics, permissions
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from .models import CourtVerdict
 from .serializers import CourtVerdictSerializer
@@ -9,14 +9,13 @@ class CourtVerdictListCreateView(generics.ListCreateAPIView):
     GET: List all verdicts (Accessible by any Police Personnel).
     POST: Issue a new verdict (Strictly limited to Judges).
     """
-    queryset = CourtVerdict.objects.select_related('interrogation', 'judge').all()
+    queryset = CourtVerdict.objects.select_related('interrogation', 'judge').all().order_by('-issued_at')
     serializer_class = CourtVerdictSerializer
 
     def get_permissions(self):
-        # Dynamically assign permissions based on the request method
         if self.request.method == 'POST':
             return [IsJudge()]
-        return [IsPolicePersonnel()]
+        return [permissions.AllowAny()]
 
     @extend_schema(
         summary="Issue a Court Verdict",
@@ -47,7 +46,7 @@ class CourtVerdictDetailView(generics.RetrieveAPIView):
     """
     queryset = CourtVerdict.objects.all()
     serializer_class = CourtVerdictSerializer
-    permission_classes = [IsPolicePersonnel]
+    permission_classes = [permissions.AllowAny]
 
     @extend_schema(summary="Get Verdict Details")
     def get(self, request, *args, **kwargs):

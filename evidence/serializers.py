@@ -58,13 +58,44 @@ class MiscEvidenceSerializer(serializers.ModelSerializer):
 
 # ─── UNIFIED READ-ONLY LIST SERIALIZER ───────────────────────────
 class EvidenceListSerializer(serializers.ModelSerializer):
-    """
-    Used to return a lightweight list of ALL evidence for a specific case,
-    regardless of what child type it is.
-    """
     recorder_name = serializers.CharField(source='recorder.get_full_name', read_only=True)
     type_display = serializers.CharField(source='get_evidence_type_display', read_only=True)
+    
+    # ─── TYPE-SPECIFIC FIELDS (Polymorphic Access) ───
+    # We use source='childmodelname.fieldname' to pull data from sub-tables
+    vehicle_details = serializers.SerializerMethodField()
+    witness_details = serializers.SerializerMethodField()
+    bio_details = serializers.SerializerMethodField()
+    id_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Evidence
-        fields = ('id', 'title', 'type_display', 'recorder_name', 'created_at')
+        fields = (
+            'id', 'title', 'description', 'evidence_type', 'type_display', 
+            'recorder_name', 'created_at',
+            'vehicle_details', 'witness_details', 'bio_details', 'id_details'
+        )
+        
+    def get_vehicle_details(self, obj):
+        if obj.evidence_type == 'VEHICLE' and hasattr(obj, 'vehicleevidence'):
+            v = obj.vehicleevidence
+            return {"model": v.model_name, "color": v.color, "plate": v.plate_number, "serial": v.serial_number}
+        return None
+
+    def get_witness_details(self, obj):
+        if obj.evidence_type == 'WITNESS' and hasattr(obj, 'witnessevidence'):
+            w = obj.witnessevidence
+            return {"transcript": w.transcript, "media": w.media_url}
+        return None
+
+    def get_bio_details(self, obj):
+        if obj.evidence_type == 'BIO' and hasattr(obj, 'bioevidence'):
+            b = obj.bioevidence
+            return {"bio_type": b.bio_type, "verification": b.coroner_verification}
+        return None
+
+    def get_id_details(self, obj):
+        if obj.evidence_type == 'ID' and hasattr(obj, 'idevidence'):
+            i = obj.idevidence
+            return {"owner": i.owner_name, "data": i.document_data}
+        return None

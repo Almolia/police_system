@@ -2,7 +2,7 @@ from rest_framework import generics
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from .models import Case, Evidence, VehicleEvidence
-from accounts.permissions import IsPolicePersonnel
+from accounts.permissions import IsPolicePersonnel, IsJudge
 from .serializers import (
     EvidenceListSerializer, VehicleEvidenceSerializer, 
     WitnessEvidenceSerializer, BioEvidenceSerializer, 
@@ -15,7 +15,7 @@ class CaseEvidenceListView(generics.ListAPIView):
     GET: List all evidence attached to a specific case.
     """
     serializer_class = EvidenceListSerializer
-    permission_classes = [IsPolicePersonnel]
+    permission_classes = [IsPolicePersonnel | IsJudge]
 
     def get_queryset(self):
         case_id = self.kwargs.get('case_id')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import CourtroomPanel from './features/legal/CourtroomPanel';
 import * as THREE from 'three';
 // @ts-ignore (Vanta doesn't have official TypeScript definitions yet)
 import NET from 'vanta/dist/vanta.net.min';
@@ -33,6 +34,9 @@ function NavLinks() {
             <Link to="/finance" className={location.pathname === '/finance' ? activeClass : inactiveClass}>
                 Finance Dashboard
             </Link>
+            <Link to="/court" className={location.pathname === '/court' ? activeClass : inactiveClass}>
+    Courtroom
+</Link>
         </div>
     );
 }
@@ -88,6 +92,7 @@ export default function App() {
                         <Route path="/finance" element={<FinanceDashboard />} />
                         <Route path="/payment-callback" element={<PaymentCallback />} />
                         <Route path="/login" element={<LoginPlaceholder />} />
+                        <Route path="/court" element={<CourtroomPanel />} />
                     </Routes>
                 </div>
 
