@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
-import GlobalReport from '../../components/GlobalReport'; // Ensure this path is correct!
+import GlobalReport from '../../components/GlobalReport';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CourtroomPanel() {
-    // ─── DEV SIMULATOR ───
-    const [userRole, setUserRole] = useState<'JUDGE' | 'OFFICER' | 'CITIZEN'>('JUDGE');
+    // ─── AUTH CONTEXT ───
+    const { user, devSwitchRole } = useAuth();
     const [activeTab, setActiveTab] = useState<'ISSUE' | 'HISTORY'>('ISSUE');
     
     // ─── MODAL STATE ───
@@ -34,6 +35,7 @@ export default function CourtroomPanel() {
 
     const fetchVerdicts = async () => {
         try {
+            // Publicly accessible verdict list
             const response = await api.get('legal/verdicts/');
             setVerdicts(response.data);
         } catch (error) {
@@ -43,11 +45,13 @@ export default function CourtroomPanel() {
 
     useEffect(() => {
         fetchVerdicts();
-        if (userRole !== 'JUDGE') setActiveTab('HISTORY');
-    }, [userRole]);
+        // Force the tab to History if a non-judge is selected
+        if (user?.role !== 'JUDGE') setActiveTab('HISTORY');
+    }, [user?.role]);
 
     const handleVerdictChange = (newVerdict: string) => {
         setVerdict(newVerdict);
+        // Logical enforcement: Innocent people cannot be sentenced
         if (newVerdict === 'INNOCENT') {
             setSentenceType('NONE');
             setPrisonMonths('');
@@ -81,6 +85,7 @@ export default function CourtroomPanel() {
                 description
             };
 
+            // Post restricted to Judge role
             await api.post('legal/verdicts/', payload);
             displayMessage('✅ Court Verdict Issued Successfully!');
             
@@ -100,7 +105,7 @@ export default function CourtroomPanel() {
     return (
         <div className="max-w-6xl mx-auto p-6 mt-10 font-sans relative">
             
-            {/* ─── TOAST ALERT ─── */}
+            {/* ─── FLOATING TOAST ALERT ─── */}
             {statusMessage && (
                 <div className={`fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg font-bold shadow-2xl z-50 transition-all duration-300 ${statusMessage.includes('❌') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
                     {statusMessage}
@@ -135,22 +140,12 @@ export default function CourtroomPanel() {
                                 onClick={() => setIsModalOpen(false)}
                                 className="px-6 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded shadow transition-colors"
                             >
-                                Close Dossier & Return to Sentencing
+                                Close Dossier & Return
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-
-            {/* ─── DEV SIMULATOR ─── */}
-            <div className="mb-6 p-4 bg-gray-900 border border-gray-700 rounded-lg flex items-center gap-4 shadow-xl">
-                <span className="font-bold text-gray-300">⚖️ Role Simulator:</span>
-                <select className="p-2 border border-gray-600 rounded font-bold text-white bg-gray-800 focus:ring-2 focus:ring-blue-500" value={userRole} onChange={(e: any) => setUserRole(e.target.value)}>
-                    <option value="JUDGE">The Honorable Judge (Can Issue Verdicts)</option>
-                    <option value="OFFICER">Police Officer (View Only)</option>
-                    <option value="CITIZEN">Standard Citizen (Public Record View)</option>
-                </select>
-            </div>
 
             {/* ─── MAIN PANEL ─── */}
             <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
@@ -158,11 +153,11 @@ export default function CourtroomPanel() {
                     <h2 className="text-3xl font-black text-white flex items-center gap-3">
                         🏛️ The Courtroom
                     </h2>
-                    <p className="text-slate-400 mt-1">Review investigations and final legal proceedings.</p>
+                    <p className="text-slate-400 mt-1">Final legal proceedings and sentencing archives.</p>
                 </div>
 
                 {/* ─── CONDITIONAL HEADER ─── */}
-                {userRole === 'JUDGE' ? (
+                {user?.role === 'JUDGE' ? (
                     <div className="flex bg-slate-100 border-b border-gray-200">
                         <button onClick={() => setActiveTab('ISSUE')} className={`flex-1 py-4 font-black transition-colors ${activeTab === 'ISSUE' ? 'bg-white text-slate-900 border-t-4 border-t-red-700' : 'text-slate-500 hover:bg-slate-200'}`}>
                             Issue Formal Verdict
@@ -180,7 +175,7 @@ export default function CourtroomPanel() {
                 )}
 
                 {/* ─── TAB: ISSUE VERDICT (JUDGE ONLY) ─── */}
-                {activeTab === 'ISSUE' && userRole === 'JUDGE' && (
+                {activeTab === 'ISSUE' && user?.role === 'JUDGE' && (
                     <div className="p-8 bg-white">
                         <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-3xl mx-auto">
                             
@@ -191,7 +186,7 @@ export default function CourtroomPanel() {
                                     <input 
                                         type="number" 
                                         className="w-full p-3 border rounded shadow-sm focus:ring-2 focus:ring-red-500 font-mono text-lg" 
-                                        placeholder="Enter the Interrogation ID..." 
+                                        placeholder="Enter ID..." 
                                         value={interrogationId} 
                                         onChange={(e) => setInterrogationId(e.target.value)} 
                                         required 
@@ -202,13 +197,13 @@ export default function CourtroomPanel() {
                                     onClick={handleOpenModal}
                                     className="px-6 py-3 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded shadow-md transition-colors whitespace-nowrap h-fit"
                                 >
-                                    🔍 Fetch & Review File
+                                    🔍 Review Dossier
                                 </button>
                             </div>
 
                             <hr className="my-2 border-slate-200" />
 
-                            {/* The Decision */}
+                            {/* Sentencing Logic */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Final Verdict</label>
@@ -220,7 +215,7 @@ export default function CourtroomPanel() {
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Sentence Type</label>
                                     <select className="w-full p-3 border rounded shadow-sm bg-white" value={sentenceType} onChange={(e) => setSentenceType(e.target.value)} disabled={verdict === 'INNOCENT'}>
-                                        <option value="NONE">None (Innocent)</option>
+                                        <option value="NONE">None</option>
                                         {verdict === 'GUILTY' && (
                                             <>
                                                 <option value="PRISON">Imprisonment</option>
@@ -250,10 +245,10 @@ export default function CourtroomPanel() {
 
                             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Official Title of Ruling</label>
-                                <input type="text" className="w-full p-3 border rounded shadow-sm mb-4" placeholder="e.g., Conviction for 1st Degree Armed Robbery" value={title} onChange={(e) => setTitle(e.target.value)} required />
+                                <input type="text" className="w-full p-3 border rounded shadow-sm mb-4" placeholder="e.g., Armed Robbery Conviction" value={title} onChange={(e) => setTitle(e.target.value)} required />
                                 
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Judge's Final Remarks</label>
-                                <textarea className="w-full p-3 border rounded shadow-sm" placeholder="Detail the reasoning behind this sentence..." value={description} onChange={(e) => setDescription(e.target.value)} required rows={4} />
+                                <textarea className="w-full p-3 border rounded shadow-sm" placeholder="Full text of the sentencing..." value={description} onChange={(e) => setDescription(e.target.value)} required rows={4} />
                             </div>
 
                             <button type="submit" disabled={isLoading} className="mt-4 w-full py-4 bg-slate-900 hover:bg-black text-white text-lg font-black rounded-xl shadow-lg transition-all disabled:opacity-50">
@@ -271,7 +266,7 @@ export default function CourtroomPanel() {
                                 <div key={v.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 relative overflow-hidden">
                                     <div className={`absolute top-0 left-0 w-1.5 h-full ${v.verdict === 'GUILTY' ? 'bg-red-600' : 'bg-green-500'}`}></div>
                                     
-                                    <div className="pl-3">
+                                    <div className="pl-3 text-slate-900">
                                         <div className="flex justify-between items-start mb-2">
                                             <h3 className="font-black text-lg text-slate-800">{v.title}</h3>
                                             <span className={`px-3 py-1 text-xs font-bold rounded-full ${v.verdict === 'GUILTY' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
@@ -282,10 +277,10 @@ export default function CourtroomPanel() {
                                         
                                         <div className="grid grid-cols-2 gap-y-2 text-sm">
                                             <p className="text-slate-500">Target Interrogation:</p>
-                                            <p className="font-mono font-bold text-slate-800">Inq-#{v.interrogation}</p>
+                                            <p className="font-mono font-bold">Inq-#{v.interrogation}</p>
                                             
                                             <p className="text-slate-500">Sentence Type:</p>
-                                            <p className="font-bold text-slate-800">{v.sentence_type.replace(/_/g, ' ')}</p>
+                                            <p className="font-bold">{v.sentence_type.replace(/_/g, ' ')}</p>
 
                                             {(v.prison_months > 0) && (
                                                 <>
@@ -309,7 +304,7 @@ export default function CourtroomPanel() {
                             ))}
                             {verdicts.length === 0 && (
                                 <div className="col-span-2 p-10 text-center text-slate-500 font-medium bg-white rounded-lg border border-dashed border-slate-300">
-                                    No verdicts have been issued yet. The courtroom is clear.
+                                    No verdicts have been issued yet.
                                 </div>
                             )}
                         </div>

@@ -77,14 +77,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     Notice that sensitive fields like 'national_id' and 'role' are read-only!
     """
     role_name = serializers.CharField(source='role.name', read_only=True)
+    role_codename = serializers.CharField(source='role.codename', read_only=True)
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'first_name', 'last_name', 
-            'email', 'phone_number', 'national_id', 'role_name'
+            'email', 'phone_number', 'national_id', 'role_name', 'role_codename'
         )
-        read_only_fields = ('id', 'username', 'national_id', 'role_name')
+        read_only_fields = ('id', 'username', 'national_id', 'role_name', 'role_codename')
     
     def validate_phone_number(self, value):
         """Basic validation for Iranian phone numbers."""
