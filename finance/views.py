@@ -1,4 +1,5 @@
 import requests
+from django.db.models import Sum
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -44,11 +45,21 @@ ZARINPAL_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
             )
         ]
     )
-class TipListCreateView(generics.CreateAPIView):
-    """POST /tips/ - Citizen submits a new tip."""
-    queryset = Reward.objects.all()
+
+class TipListCreateView(generics.ListCreateAPIView):
+    """GET /tips/ (List) and POST /tips/ (Create)"""
     serializer_class = CitizenRewardSubmitSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
+    def get_queryset(self):
+        user = self.request.user
+        # If the user is a standard citizen, ONLY return their own tips
+        if hasattr(user, 'role') and user.role.codename == 'CITIZEN':
+            return Reward.objects.filter(citizen=user).order_by('-created_at')
+        
+        # If they are police (Officer, Detective, Sergeant), return all tips
+        return Reward.objects.all().order_by('-created_at')
+
     def perform_create(self, serializer):
         serializer.save(citizen=self.request.user)
 
@@ -183,13 +194,22 @@ class TipVerificationView(APIView):
             )
         ]
     )
-class ReleaseRequestListCreateView(generics.CreateAPIView):
-    """POST /release-requests/ - Suspect/Lawyer requests release."""
-    queryset = ReleaseRequest.objects.all()
+
+class ReleaseRequestListCreateView(generics.ListCreateAPIView):
+    """GET /release-requests/ (List) and POST /release-requests/ (Create)"""
     serializer_class = ReleaseRequestCreateSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
+    def get_queryset(self):
+        user = self.request.user
+        # If the user is a citizen/suspect, ONLY return their own requests
+        if hasattr(user, 'role') and user.role.codename == 'CITIZEN':
+            return ReleaseRequest.objects.filter(requested_by=user).order_by('-created_at')
+        
+        # If they are police, return everything
+        return ReleaseRequest.objects.all().order_by('-created_at')
+        
     def perform_create(self, serializer):
-        # We assume validation logic is inside the serializer as discussed earlier
         serializer.save(requested_by=self.request.user)
 
 @extend_schema(
@@ -275,11 +295,14 @@ class InitiatePaymentView(generics.CreateAPIView):
         tx_type = serializer.validated_data.get('transaction_type')
 
         # 2. SECURITY FIX: Look up the Sergeant's approved Release Request
-        try:
-            release_request = ReleaseRequest.objects.get(interrogation=interrogation, status='APPROVED')
-        except ReleaseRequest.DoesNotExist:
-            return Response({"error": "No approved release request found for this interrogation."}, status=status.HTTP_400_BAD_REQUEST)
+        release_request = ReleaseRequest.objects.filter(
+            interrogation=interrogation, 
+            status='APPROVED'
+        ).order_by('-created_at').first()
 
+        if not release_request:
+            return Response({"error": "No approved release request found for this interrogation."}, status=status.HTTP_400_BAD_REQUEST)
+        
         # 3. Determine the exact amount owed
         if tx_type == 'BAIL':
             real_amount = release_request.bail_amount
@@ -295,13 +318,16 @@ class InitiatePaymentView(generics.CreateAPIView):
         # Convert to Rials for ZarinPal
         amount_in_rials = int(real_amount) * 10 
         
-        # 4. Request Authority Code from ZarinPal
+        frontend_callback = request.data.get('callback_url', CALLBACK_URL)
+        
         payload = {
             "merchant_id": ZARINPAL_MERCHANT_ID,
             "amount": amount_in_rials,
             "description": f"Payment for Interrogation {interrogation.id}",
-            "callback_url": CALLBACK_URL,
+            "callback_url": frontend_callback,
         }
+        
+        response = requests.post(ZARINPAL_REQUEST_URL, json=payload)
         
         response = requests.post(ZARINPAL_REQUEST_URL, json=payload)
         res_data = response.json()
@@ -370,7 +396,7 @@ class PaymentCallbackView(APIView):
     )
     def get(self, request):
         authority = request.query_params.get('Authority')
-        status_param = request.query_params.get('Status')
+        status_param = request.query_params.get('Status', '').rstrip('/')
 
         if not authority or not status_param:
             return Response({"error": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
@@ -380,14 +406,19 @@ class PaymentCallbackView(APIView):
         except Transaction.DoesNotExist:
             return Response({"error": "Transaction not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        if transaction.status == 'SUCCESS':
+            return Response({
+                "message": "Payment was already verified successfully!",
+                "ref_id": transaction.ref_id,
+            }, status=status.HTTP_200_OK)
+
         if transaction.status != 'PENDING':
             return Response({"error": "Transaction already processed."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # If user cancelled or card declined on ZarinPal's page
         if status_param != 'OK':
             transaction.status = 'FAILED' 
             transaction.save()
-            return Response({"error": "Payment failed or was canceled."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Payment failed or was canceled on the gateway."}, status=status.HTTP_400_BAD_REQUEST)
 
         # --- REAL ZARINPAL VERIFICATION ---
         amount_in_rials = int(transaction.amount) * 10
@@ -401,24 +432,44 @@ class PaymentCallbackView(APIView):
         verify_res = requests.post(ZARINPAL_VERIFY_URL, json=verify_payload)
         verify_data = verify_res.json()
         data = verify_data.get('data')
-        # Code 100 = Success, Code 101 = Already Verified
-        if isinstance(data, dict) and data.get('code') == 100 or data.get('code') == 101:
+        
+        if isinstance(data, dict) and data.get('code') in [100, 101]:
             transaction.status = 'SUCCESS' 
-            # ZarinPal gives us a real reference ID (e.g., for the receipt)
             transaction.ref_id = str(verify_data['data']['ref_id']) 
             transaction.save()
 
-            # Trigger Release Request Update
             if transaction.transaction_type in ['BAIL', 'FINE']:
                 try:
-                    release_request = ReleaseRequest.objects.get(
+                    # 1. Grab the LATEST approved request
+                    release_request = ReleaseRequest.objects.filter(
                         interrogation=transaction.interrogation,
                         status='APPROVED'
-                    )
-                    release_request.status = 'PAID' 
-                    release_request.save()
-                except ReleaseRequest.DoesNotExist:
-                    pass # Log this in production
+                    ).order_by('-created_at').first()
+                    
+                    if release_request:
+                        from django.db.models import Sum
+                        
+                        # 2. ONLY sum payments made AFTER this specific request was created
+                        # This prevents last year's bail from paying for today's crime!
+                        recent_successful_txs = Transaction.objects.filter(
+                            interrogation=transaction.interrogation,
+                            status='SUCCESS',
+                            created_at__gte=release_request.created_at
+                        )
+                        
+                        bail_paid = recent_successful_txs.filter(transaction_type='BAIL').aggregate(Sum('amount'))['amount__sum'] or 0
+                        fine_paid = recent_successful_txs.filter(transaction_type='FINE').aggregate(Sum('amount'))['amount__sum'] or 0
+                        
+                        bail_required = release_request.bail_amount or 0
+                        fine_required = release_request.fine_amount or 0
+                        
+                        # 3. Release only if BOTH are fully paid
+                        if bail_paid >= bail_required and fine_paid >= fine_required:
+                            release_request.status = 'PAID' 
+                            release_request.save()
+                            
+                except Exception as e:
+                    print("Error updating ReleaseRequest:", e)
 
             return Response({
                 "message": "Payment verified successfully!",
@@ -426,7 +477,6 @@ class PaymentCallbackView(APIView):
             }, status=status.HTTP_200_OK)
             
         else:
-            # The bank says the payment is invalid, even though the URL said "OK"
             transaction.status = 'FAILED'
             transaction.save()
             return Response({

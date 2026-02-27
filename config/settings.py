@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ZARINPAL_MERCHANT_ID = os.getenv('ZARINPAL_MERCHANT_ID', '12345678-1234-1234-1234-1234567890ab')
-PAYMENT_CALLBACK_URL = os.getenv('PAYMENT_CALLBACK_URL', 'http://127.0.0.1:8000/api/finance/payments/callback/')
+PAYMENT_CALLBACK_URL = 'http://localhost:5173/payment-callback'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from .models import Reward, Transaction, ReleaseRequest
 import uuid
 
@@ -20,7 +21,8 @@ class CitizenRewardSubmitSerializer(serializers.ModelSerializer):
             'suspect',    # Optional: If the citizen knows who the suspect is
             'status', 
             'amount', 
-            'created_at'
+            'created_at',
+            'unique_tracking_id'
         )
         
         # The citizen can ONLY write to 'description', 'case', and 'suspect'.
@@ -29,7 +31,8 @@ class CitizenRewardSubmitSerializer(serializers.ModelSerializer):
             'id', 
             'status', 
             'amount', 
-            'created_at'
+            'created_at',
+            'unique_tracking_id'
         )
 
 class OfficerTipReviewSerializer(serializers.ModelSerializer):
@@ -71,10 +74,29 @@ class DetectiveTipApprovalSerializer(serializers.ModelSerializer):
     
 # ─── BAIL / FINES ───
 class ReleaseRequestCreateSerializer(serializers.ModelSerializer):
+    bail_paid = serializers.SerializerMethodField()
+    fine_paid = serializers.SerializerMethodField()
     class Meta:
         model = ReleaseRequest
-        fields = ('id', 'interrogation', 'status')
-        read_only_fields = ('id', 'status') 
+        fields = ('id', 'interrogation', 'status', 'bail_amount', 'fine_amount', 'created_at', 'bail_paid', 'fine_paid')
+        read_only_fields = ('id', 'status', 'created_at', 'bail_amount', 'fine_amount', 'bail_paid', 'fine_paid') 
+    def get_bail_paid(self, obj):
+        # Calculate successful bail payments made AFTER this request was created
+        paid = obj.interrogation.transactions.filter(
+            transaction_type='BAIL',
+            status='SUCCESS',
+            created_at__gte=obj.created_at
+        ).aggregate(Sum('amount'))['amount__sum']
+        return paid or 0
+
+    def get_fine_paid(self, obj):
+        # Calculate successful fine payments made AFTER this request was created
+        paid = obj.interrogation.transactions.filter(
+            transaction_type='FINE',
+            status='SUCCESS',
+            created_at__gte=obj.created_at
+        ).aggregate(Sum('amount'))['amount__sum']
+        return paid or 0
 
 class SergeantReleaseReviewSerializer(serializers.ModelSerializer):
     class Meta:
