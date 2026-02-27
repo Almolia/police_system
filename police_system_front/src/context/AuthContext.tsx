@@ -1,89 +1,63 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../utils/api';
-
-export type UserRole = 'CITIZEN' | 'OFFICER' | 'SERGEANT' | 'DETECTIVE' | 'CAPTAIN' | 'CHIEF' | 'JUDGE';
-
-interface User {
-    username: string;
-    role: UserRole;
-    email?: string;
-}
+// src/context/AuthContext.tsx
+import {createContext, useContext, useState, useEffect, type ReactNode} from 'react';
+import { clearTokens } from '../utils/authStorage';
+import type { UserData } from '../features/auth/authApi';
 
 interface AuthContextType {
-    user: User | null;
     token: string | null;
+    user: UserData | null;
     isLoading: boolean;
-    login: (userData: User, token: string) => void;
+    login: (access: string, refresh: string, user: UserData) => void;
     logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+export function AuthProvider({ children }: { children: ReactNode }) {
+    const [token, setToken]     = useState<string | null>(null);
+    const [user, setUser]       = useState<UserData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const logout = () => {
-        setUser(null);
-        setToken(null);
-        localStorage.clear();
-        delete api.defaults.headers.common['Authorization'];
-    };
-
+    // بازیابی session از localStorage هنگام reload
     useEffect(() => {
-        const verifySession = async () => {
-            const savedToken = localStorage.getItem('token');
-            const savedUser = localStorage.getItem('user');
+        const savedToken = localStorage.getItem('access_token');
+        const savedUser  = localStorage.getItem('auth_user');
 
-            if (savedToken && savedUser && savedUser !== 'undefined') {
+        if (savedToken && savedUser) {
+            try {
                 setToken(savedToken);
                 setUser(JSON.parse(savedUser));
-                api.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-            } else {
-                logout(); 
+            } catch {
+                clearTokens();
             }
-            setIsLoading(false);
-        };
-        verifySession();
-
-        const interceptor = api.interceptors.response.use(
-            (response) => response,
-            (error) => {
-                const url = error.config?.url || '';
-                
-                // ─── FIX: Ignore 401s from the login/register endpoints! ───
-                // This stops the page from freaking out when you type a wrong password.
-                if (error.response?.status === 401 && !url.includes('login') && !url.includes('register')) {
-                    console.warn("🔒 Session ended or token invalid. Auto-logging out.");
-                    logout();
-                }
-                return Promise.reject(error);
-            }
-        );
-
-        return () => {
-            api.interceptors.response.eject(interceptor);
-        };
+        }
+        setIsLoading(false);
     }, []);
 
-    const login = (userData: User, authToken: string) => {
+    const login = (access: string, refresh: string, userData: UserData) => {
+        setToken(access);
         setUser(userData);
-        setToken(authToken);
-        localStorage.setItem('token', authToken);
-        localStorage.setItem('user', JSON.stringify(userData));
-        api.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+        localStorage.setItem('access_token', access);
+        localStorage.setItem('refresh_token', refresh);
+        localStorage.setItem('auth_user', JSON.stringify(userData));
+    };
+
+    const logout = () => {
+        setToken(null);
+        setUser(null);
+        clearTokens();
+        localStorage.removeItem('auth_user');
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+        <AuthContext.Provider value={{ token, user, isLoading, login, logout }}>
             {children}
         </AuthContext.Provider>
     );
-};
+}
 
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) throw new Error('useAuth must be used within an AuthProvider');
-    return context;
-};
+export function useAuth(): AuthContextType {
+    const ctx = useContext(AuthContext);
+    if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+    return ctx;
+}

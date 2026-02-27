@@ -1,113 +1,109 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { loginUser } from "./authApi";
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { loginUser } from './authApi';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginPage() {
-    const navigate = useNavigate();
+    const navigate   = useNavigate();
+    const { login }  = useAuth();
 
-    const [form, setForm] = useState({ username: "", password: "" });
+    const [form, setForm]       = useState({ username: '', password: '' });
+    const [error, setError]     = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
-    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-        setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    }
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
 
-    async function handleSubmit(e: React.FormEvent) {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
+        setError('');
         setLoading(true);
+
         try {
-            await loginUser(form);
-            navigate("/");
+            const data = await loginUser(form);
+
+            // ✅ توکن ذخیره میشه و context آپدیت میشه
+            login(data.access, data.refresh, data.user);
+
+            // ✅ هدایت بر اساس نقش
+            if (data.user.role === 'CITIZEN') {
+                navigate('/finance', { replace: true });
+            } else {
+                navigate('/', { replace: true });
+            }
         } catch (err: any) {
             const msg =
                 err?.response?.data?.detail ||
                 err?.response?.data?.non_field_errors?.[0] ||
-                "Login failed. Please check your credentials.";
+                'نام کاربری یا رمز عبور اشتباه است';
             setError(msg);
         } finally {
             setLoading(false);
         }
-    }
+    };
 
     return (
-        <div className="min-h-screen flex items-center justify-center px-4">
-            <div className="w-full max-w-md bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl border border-white/20 p-8">
+        <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="bg-slate-800/80 backdrop-blur border border-blue-500/30 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+                <h1 className="text-2xl font-bold text-white mb-2 text-center">
+                    🔐 ورود به سیستم
+                </h1>
+                <p className="text-slate-400 text-sm text-center mb-6">
+                    سیستم مدیریت پلیس
+                </p>
 
-                {/* Header */}
-                <div className="mb-8 text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-900 mb-4">
-                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                    </div>
-                    <h1 className="text-2xl font-bold text-blue-900">Police System</h1>
-                    <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
-                </div>
-
-                {/* Error */}
                 {error && (
-                    <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div className="bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg p-3 mb-4 text-sm">
                         {error}
                     </div>
                 )}
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Username
+                        <label className="block text-slate-300 text-sm mb-1">
+                            نام کاربری
                         </label>
                         <input
-                            type="text"
                             name="username"
                             value={form.username}
                             onChange={handleChange}
                             required
                             autoComplete="username"
-                            placeholder="Enter your username"
-                            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-900
-                         focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent
-                         placeholder-gray-400 text-sm transition"
+                            className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+                            placeholder="نام کاربری خود را وارد کنید"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Password
+                        <label className="block text-slate-300 text-sm mb-1">
+                            رمز عبور
                         </label>
                         <input
-                            type="password"
                             name="password"
+                            type="password"
                             value={form.password}
                             onChange={handleChange}
                             required
                             autoComplete="current-password"
-                            placeholder="Enter your password"
-                            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-900
-                         focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent
-                         placeholder-gray-400 text-sm transition"
+                            className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+                            placeholder="رمز عبور خود را وارد کنید"
                         />
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-2.5 rounded-lg bg-blue-900 hover:bg-blue-800 active:bg-blue-950
-                       text-white font-semibold text-sm tracking-wide transition
-                       disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+                        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-lg transition-colors"
                     >
-                        {loading ? "Signing in..." : "Sign In"}
+                        {loading ? '⏳ در حال ورود...' : 'ورود'}
                     </button>
                 </form>
 
-                {/* Footer link */}
-                <p className="mt-6 text-center text-sm text-gray-500">
-                    Don&apos;t have an account?{" "}
-                    <Link to="/register" className="text-blue-700 hover:text-blue-900 font-medium transition">
-                        Register here
+                <p className="text-slate-400 text-sm text-center mt-6">
+                    حساب کاربری ندارید؟{' '}
+                    <Link to="/register" className="text-blue-400 hover:text-blue-300 transition-colors">
+                        ثبت‌نام کنید
                     </Link>
                 </p>
             </div>
