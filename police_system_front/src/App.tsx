@@ -14,6 +14,7 @@ import EvidenceManager from './features/evidence/EvidenceManager';
 import FinanceDashboard from './features/finance/FinanceDashboard';
 import PaymentCallback from './features/finance/PaymentCallback';
 import CourtroomPanel from './features/legal/CourtroomPanel';
+import CoronerPanel from './features/evidence/CoronerPanel';
 
 // ─── PROTECTED ROUTE LOGIC ───
 function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: string[] }) {
@@ -22,11 +23,8 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?
     if (isLoading) return <div className="h-screen flex items-center justify-center"><SkeletonLoader type="card" /></div>;
     if (!token) return <Navigate to="/auth" replace />;
 
-    // ─── FIX: Smart Redirects ───
     if (roles && user && !roles.includes(user.role)) {
-        // If a CITIZEN tries to access Evidence, bounce them to Finance
         if (user.role === 'CITIZEN') return <Navigate to="/finance" replace />;
-        // If an unauthorized Police member accesses a restricted area, bounce them to Home
         return <Navigate to="/" replace />;
     }
 
@@ -41,16 +39,26 @@ function NavLinks() {
     const activeClass = "bg-blue-600 text-white px-4 py-2 rounded-md transition-colors shadow-lg";
     const inactiveClass = "text-blue-100 hover:text-white hover:bg-blue-600 px-4 py-2 rounded-md transition-colors";
 
+    // Roles allowed to access the Coroner Lab
+    const isCoronerStaff = ['DETECTIVE', 'CAPTAIN', 'CHIEF'].includes(user?.role || '');
+
     return (
         <nav className="bg-slate-900/90 backdrop-blur-md shadow-lg p-4 sticky top-0 z-50 border-b border-blue-500/30">
             <div className="max-w-6xl mx-auto flex justify-between items-center font-bold">
                 <div className="flex gap-4">
-                    {/* ─── FIX: Hide the Evidence link completely from Citizens ─── */}
                     {user?.role !== 'CITIZEN' && (
                         <Link to="/" className={location.pathname === '/' ? activeClass : inactiveClass}>
                             Evidence Panel
                         </Link>
                     )}
+                    
+                    {/* ─── NEW: Add link to the Coroner Lab ─── */}
+                    {isCoronerStaff && (
+                        <Link to="/coroner" className={location.pathname === '/coroner' ? activeClass : inactiveClass}>
+                            Forensics Lab
+                        </Link>
+                    )}
+
                     <Link to="/finance" className={location.pathname === '/finance' ? activeClass : inactiveClass}>Finance</Link>
                     <Link to="/court" className={location.pathname === '/court' ? activeClass : inactiveClass}>Courtroom</Link>
                 </div>
@@ -107,10 +115,16 @@ function AppContent() {
                 <Routes>
                     <Route path="/auth" element={token ? <Navigate to="/" replace /> : <AuthPage />} />
                     
-                    {/* ─── FIX: The Evidence panel requires a Police role to enter ─── */}
                     <Route path="/" element={
                         <ProtectedRoute roles={['OFFICER', 'SERGEANT', 'DETECTIVE', 'CAPTAIN', 'CHIEF', 'JUDGE']}>
                             <EvidenceManager />
+                        </ProtectedRoute>
+                    } />
+                    
+                    {/* ─── NEW: Protected Route for Forensics/Coroner ─── */}
+                    <Route path="/coroner" element={
+                        <ProtectedRoute roles={['DETECTIVE', 'CAPTAIN', 'CHIEF']}>
+                            <CoronerPanel />
                         </ProtectedRoute>
                     } />
                     

@@ -5,10 +5,9 @@ import SkeletonLoader from '../../components/common/SkeletonLoader';
 import EvidenceList from './EvidenceList';
 
 export default function EvidenceManager() {
-    // ─── AUTH CONTEXT (Production Logic) ───
     const { user } = useAuth();
 
-    // Define who counts as "Police Personnel" based on backend permissions
+    // Define who counts as "Police Personnel"
     const policeRoles = ['OFFICER', 'SERGEANT', 'DETECTIVE', 'CAPTAIN', 'CHIEF'];
     const isPolice = policeRoles.includes(user?.role || '');
 
@@ -17,7 +16,7 @@ export default function EvidenceManager() {
     const [selectedCaseId, setSelectedCaseId] = useState<string>('');
     const [isLoadingCases, setIsLoadingCases] = useState(true);
 
-    // ─── FORM STATES ───
+    // ─── SHARED FORM STATES ───
     const [evidenceType, setEvidenceType] = useState('VEHICLE');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -27,21 +26,23 @@ export default function EvidenceManager() {
     const [serialNumber, setSerialNumber] = useState('');
     const [vehicleModel, setVehicleModel] = useState(''); 
     const [vehicleColor, setVehicleColor] = useState(''); 
+    
     const [ownerName, setOwnerName] = useState('');
     const [idAttributes, setIdAttributes] = useState([{ key: '', value: '' }]);
+    
     const [transcript, setTranscript] = useState('');
     const [mediaUrl, setMediaUrl] = useState('');
+    
     const [bioType, setBioType] = useState('BLOOD'); 
+    const [bioImageFile, setBioImageFile] = useState<File | null>(null);
     
     // ─── UI STATE ───
     const [statusMessage, setStatusMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    // Fetch Cases on Component Mount
     useEffect(() => {
         const fetchCases = async () => {
             try {
-                // Endpoint follows the cases/ router structure: api/cases/cases/
                 const response = await api.get('cases/cases/'); 
                 setAvailableCases(response.data);
             } catch (error) {
@@ -53,7 +54,6 @@ export default function EvidenceManager() {
         fetchCases();
     }, []);
 
-    // Dynamic ID Attribute Handlers
     const addAttribute = () => setIdAttributes([...idAttributes, { key: '', value: '' }]);
     const removeAttribute = (index: number) => setIdAttributes(idAttributes.filter((_, i) => i !== index));
     const updateAttribute = (index: number, field: 'key' | 'value', val: string) => {
@@ -73,45 +73,62 @@ export default function EvidenceManager() {
         setIsLoading(true);
         setStatusMessage('');
 
-        const payload: any = { title, description };
-        // URL complies with evidence app routing: <case_id>/evidence/type/
         let endpoint = `evidence/${selectedCaseId}/evidence/`; 
-        
-        if (evidenceType === 'VEHICLE') {
-            endpoint += 'vehicle/';
-            payload.model_name = vehicleModel;
-            payload.color = vehicleColor;
-            if (plateNumber) payload.plate_number = plateNumber;
-            if (serialNumber) payload.serial_number = serialNumber;
-        } else if (evidenceType === 'ID') {
-            endpoint += 'id-doc/';
-            payload.owner_name = ownerName; 
-            const documentDataDict: Record<string, string> = {};
-            idAttributes.forEach(attr => {
-                if (attr.key.trim() !== '') documentDataDict[attr.key] = attr.value;
-            });
-            payload.document_data = documentDataDict; 
-        } else if (evidenceType === 'WITNESS') {
-            endpoint += 'witness/';
-            payload.transcript = transcript;
-            if (mediaUrl) payload.media_url = mediaUrl;
-        } else if (evidenceType === 'BIO') {
-            endpoint += 'bio/';
-            payload.bio_type = bioType;
-        } else if (evidenceType === 'MISC') {
-            endpoint += 'misc/';
-        }
 
         try {
-            const response = await api.post(endpoint, payload);
-            setStatusMessage(`✅ Success! Evidence ID: ${response.data.id} recorded.`);
-            
-            // Clear forms
+            // ─── FILE UPLOAD LOGIC (BIO ONLY) ───
+            if (evidenceType === 'BIO') {
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('description', description);
+                formData.append('bio_type', bioType);
+                
+                if (bioImageFile) {
+                    formData.append('image', bioImageFile); 
+                }
+    
+                const response = await api.post(endpoint + 'bio/', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                setStatusMessage(`✅ Success! Forensic Evidence ID: ${response.data.id} recorded.`);
+                setBioImageFile(null);
+                
+            } else {
+                // ─── STANDARD JSON LOGIC (VEHICLE, ID, WITNESS, MISC) ───
+                const payload: any = { title, description };
+                
+                if (evidenceType === 'VEHICLE') {
+                    endpoint += 'vehicle/';
+                    payload.model_name = vehicleModel;
+                    payload.color = vehicleColor;
+                    if (plateNumber) payload.plate_number = plateNumber;
+                    if (serialNumber) payload.serial_number = serialNumber;
+                } else if (evidenceType === 'ID') {
+                    endpoint += 'id-doc/';
+                    payload.owner_name = ownerName; 
+                    const documentDataDict: Record<string, string> = {};
+                    idAttributes.forEach(attr => {
+                        if (attr.key.trim() !== '') documentDataDict[attr.key] = attr.value;
+                    });
+                    payload.document_data = documentDataDict; 
+                } else if (evidenceType === 'WITNESS') {
+                    endpoint += 'witness/';
+                    payload.transcript = transcript;
+                    if (mediaUrl) payload.media_url = mediaUrl;
+                } else if (evidenceType === 'MISC') {
+                    endpoint += 'misc/';
+                }
+
+                const response = await api.post(endpoint, payload);
+                setStatusMessage(`✅ Success! Evidence ID: ${response.data.id} recorded.`);
+            }
+
+            // Clear global forms
             setTitle(''); setDescription('');
             setPlateNumber(''); setSerialNumber(''); setVehicleModel(''); setVehicleColor('');
             setOwnerName(''); setIdAttributes([{ key: '', value: '' }]);
             setTranscript(''); setMediaUrl('');
-            setBioType('BLOOD');
+            
         } catch (error: any) {
             setStatusMessage(`❌ Error: ${error.response?.data?.detail || "Submission failed."}`);
         } finally {
@@ -167,15 +184,16 @@ export default function EvidenceManager() {
                                     <option value="ID">ID Document</option>
                                     <option value="WITNESS">Witness Testimony</option>
                                     <option value="BIO">Forensic Sample</option>
-                                    <option value="MISC">Other Items</option>
+                                    <option value="MISC">Other Items (Misc)</option>
                                 </select>
                             </label>
                         </div>
 
+                        {/* Common Fields */}
                         <input className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 shadow-sm text-slate-900" type="text" placeholder="Official Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
                         <textarea className="p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 shadow-sm text-slate-900" placeholder="Registrar's observations and context..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
 
-                        {/* Module: Automotive */}
+                        {/* ─── MODULE: VEHICLE ─── */}
                         {evidenceType === 'VEHICLE' && (
                             <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-4">
                                 <h4 className="font-black text-slate-700 text-sm uppercase tracking-wider">Vehicle Specs</h4>
@@ -190,7 +208,7 @@ export default function EvidenceManager() {
                             </div>
                         )}
 
-                        {/* Module: Identity */}
+                        {/* ─── MODULE: IDENTITY ─── */}
                         {evidenceType === 'ID' && (
                             <div className="p-5 bg-blue-50 border-2 border-dashed border-blue-200 rounded-xl space-y-4">
                                 <h4 className="font-black text-blue-800 text-sm uppercase tracking-wider">Identification Registry</h4>
@@ -203,6 +221,51 @@ export default function EvidenceManager() {
                                     </div>
                                 ))}
                                 <button type="button" onClick={addAttribute} className="text-xs text-blue-700 font-black hover:underline uppercase">+ Add Metadata Field</button>
+                            </div>
+                        )}
+
+                        {/* ─── MODULE: WITNESS ─── */}
+                        {evidenceType === 'WITNESS' && (
+                            <div className="p-5 bg-amber-50 border-2 border-dashed border-amber-300 rounded-xl space-y-4">
+                                <h4 className="font-black text-amber-800 text-sm uppercase tracking-wider">Witness Testimony</h4>
+                                <textarea className="w-full p-3 border rounded-lg bg-white text-slate-900 focus:ring-2 focus:ring-amber-500" placeholder="Full transcription of witness statement..." value={transcript} onChange={(e) => setTranscript(e.target.value)} required rows={4} />
+                                <input className="w-full p-3 border rounded-lg bg-white text-slate-900 focus:ring-2 focus:ring-amber-500" type="url" placeholder="Media URL (Audio/Video file link, optional)" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} />
+                            </div>
+                        )}
+
+                        {/* ─── MODULE: FORENSIC / BIO ─── */}
+                        {evidenceType === 'BIO' && (
+                            <div className="p-5 bg-red-50 border-2 border-dashed border-red-200 rounded-xl space-y-4">
+                                <h4 className="font-black text-red-800 text-sm uppercase tracking-wider">Forensic Sample Collection</h4>
+                                
+                                <select className="w-full p-3 border rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-red-500" value={bioType} onChange={(e) => setBioType(e.target.value)} required>
+                                    <option value="BLOOD">Blood Sample</option>
+                                    <option value="DNA">DNA / Hair</option>
+                                    <option value="FINGERPRINT">Fingerprint</option>
+                                    <option value="OTHER">Other Biological</option>
+                                </select>
+
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-xs font-bold text-red-700 uppercase">Attach Crime Scene Photo</label>
+                                    <input 
+                                        type="file" 
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files.length > 0) {
+                                                setBioImageFile(e.target.files[0]);
+                                            }
+                                        }}
+                                        className="p-2 border rounded bg-white text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ─── MODULE: MISC ─── */}
+                        {evidenceType === 'MISC' && (
+                            <div className="p-5 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl space-y-4">
+                                <h4 className="font-black text-gray-700 text-sm uppercase tracking-wider">Miscellaneous Items</h4>
+                                <p className="text-sm text-gray-500 font-medium">No specialized fields required. Standard Title and Description will be used.</p>
                             </div>
                         )}
 

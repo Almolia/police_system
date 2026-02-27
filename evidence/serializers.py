@@ -99,3 +99,22 @@ class EvidenceListSerializer(serializers.ModelSerializer):
             i = obj.idevidence
             return {"owner": i.owner_name, "data": i.document_data}
         return None
+
+class BioQueueSerializer(serializers.ModelSerializer):
+    """Serializer for the Medical Examiner's global queue."""
+    recorder_name = serializers.SerializerMethodField()
+    images = BioEvidenceImageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = BioEvidence
+        # These fields match exactly what CoronerPanel.tsx expects
+        fields = [
+            'id', 'title', 'description', 'bio_type', 
+            'case', 'created_at', 'recorder_name', 
+            'coroner_verification', 'images'
+        ]
+
+    def get_recorder_name(self, obj):
+        if obj.recorder:
+            return f"{obj.recorder.first_name} {obj.recorder.last_name}"
+        return "Unknown Officer"
