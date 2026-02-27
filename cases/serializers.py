@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from .models import Case, CaseComplainant, CaseWitness, CaseStatus
+from drf_spectacular.utils import extend_schema_field
 
 class CaseSerializer(serializers.ModelSerializer):
+    secondary_complainants = serializers.SerializerMethodField()
     class Meta:
         model = Case
         fields = '__all__'
@@ -19,6 +21,11 @@ class CaseSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Crime scene cases require time and location.")
         
         return data
+    
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_secondary_complainants(self, obj):
+        # Returns a list of user IDs who have joined this case
+        return obj.complainants.values_list('user_id', flat=True)
 
 class CaseReviewSerializer(serializers.Serializer):
     """Used for Cadet/Officer approving or rejecting a case"""

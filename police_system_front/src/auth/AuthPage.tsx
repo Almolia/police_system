@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import { setTokens } from '../utils/authStorage';
 
 export default function AuthPage() {
     const { login } = useAuth();
@@ -30,17 +31,28 @@ export default function AuthPage() {
                 await api.post('accounts/register/', formData);
             }
 
-            // 2. Fetch the JWT Token (Works for both login and post-registration)
+            // 2. Fetch the JWT Token
             const loginRes = await api.post('accounts/login/', {
                 username: formData.username,
                 password: formData.password
             });
             
-            const token = loginRes.data.access || loginRes.data.token;
+            const accessToken = loginRes.data?.access || loginRes.data?.token;
+            const refreshToken = loginRes.data?.refresh;
+
+            if (!accessToken) {
+                throw { 
+                    response: { 
+                        data: loginRes.data || { detail: "Invalid username or password." } 
+                    } 
+                };
+            }
+
+            setTokens(accessToken, refreshToken);
 
             // 3. Fetch the user's role profile
             const profileRes = await api.get('accounts/profile/', {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${accessToken}` }
             });
 
             const userProfile = {
@@ -50,7 +62,7 @@ export default function AuthPage() {
             };
 
             // 4. Save to global state and redirect
-            login(userProfile, token);
+            login(userProfile, accessToken);
             navigate('/'); 
 
         } catch (err: any) {

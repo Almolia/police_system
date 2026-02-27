@@ -4,7 +4,7 @@ from drf_spectacular.utils import extend_schema
 from .models import Case, Evidence, VehicleEvidence
 from .models import BioEvidence
 from .serializers import BioQueueSerializer
-from accounts.permissions import IsPolicePersonnel, IsJudge
+from accounts.permissions import IsPolicePersonnel, IsJudge, IsCitizen
 from .serializers import (
     EvidenceListSerializer, VehicleEvidenceSerializer, 
     WitnessEvidenceSerializer, BioEvidenceSerializer, 
@@ -21,13 +21,25 @@ from django.conf import settings
 class CaseEvidenceListView(generics.ListAPIView):
     """
     GET: List all evidence attached to a specific case.
+    Citizens only see their own submissions. Police/Judges see everything.
     """
     serializer_class = EvidenceListSerializer
-    permission_classes = [IsPolicePersonnel | IsJudge]
+    # 1. Added IsCitizen so they are allowed to hit the endpoint
+    permission_classes = [IsPolicePersonnel | IsJudge | IsCitizen]
 
     def get_queryset(self):
         case_id = self.kwargs.get('case_id')
-        return Evidence.objects.filter(case_id=case_id).order_by('-created_at')
+        user = self.request.user
+        
+        # Base query: Get all evidence for this case
+        queryset = Evidence.objects.filter(case_id=case_id).order_by('-created_at')
+
+        # 2. Security Check: If it's a citizen, strictly filter by recorded_by
+        if getattr(user, 'role', None) and user.role.codename == 'CITIZEN':
+            return queryset.filter(recorded_by=user)
+
+        # Police and Judges get the full unfiltered queryset
+        return queryset
 
 # --- Base Class to keep our code DRY ---
 class BaseEvidenceCreateView(generics.CreateAPIView):

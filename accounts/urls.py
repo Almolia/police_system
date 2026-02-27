@@ -8,6 +8,8 @@ from .views import (
     UserProfileView,
     StaffRegistrationView,
     StaffListView,
+    AdminUserManagementView,
+    RoleListView,
 )
 
 app_name = 'accounts'
@@ -19,4 +21,6 @@ urlpatterns = [
     path('profile/', UserProfileView.as_view(), name='user_profile'),
     path('staff/register/', StaffRegistrationView.as_view(), name='staff_register'),
     path('staff/', StaffListView.as_view(), name='staff_list'),
+    path('users/<int:pk>/', AdminUserManagementView.as_view(), name='admin_user_update'),
+    path('roles/', RoleListView.as_view(), name='role_list'),
 ]

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import (
     Evidence, WitnessEvidence, BioEvidence, BioEvidenceImage, 
     VehicleEvidence, IDEvidence, MiscEvidence
@@ -91,7 +92,11 @@ class EvidenceListSerializer(serializers.ModelSerializer):
     def get_bio_details(self, obj):
         if obj.evidence_type == 'BIO' and hasattr(obj, 'bioevidence'):
             b = obj.bioevidence
-            return {"bio_type": b.bio_type, "verification": b.coroner_verification}
+            return {
+                "bio_type": b.bio_type, 
+                "verification": b.coroner_verification,
+                "image_url": b.main_image
+            }
         return None
 
     def get_id_details(self, obj):
@@ -114,7 +119,6 @@ class BioQueueSerializer(serializers.ModelSerializer):
             'coroner_verification', 'images'
         ]
 
+    @extend_schema_field(serializers.CharField())
     def get_recorder_name(self, obj):
-        if obj.recorder:
-            return f"{obj.recorder.first_name} {obj.recorder.last_name}"
-        return "Unknown Officer"
+        return f"{obj.recorder.first_name} {obj.recorder.last_name}"

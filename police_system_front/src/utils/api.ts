@@ -33,10 +33,16 @@ api.interceptors.request.use(
 
 // 3. RESPONSE INTERCEPTOR: Runs AFTER every response is received
 api.interceptors.response.use(
-    (response) => response, // If it's a success (200, 201), just pass it through
+    (response) => response, 
     
     async (error) => {
         const originalRequest = error.config;
+        const url = originalRequest.url || '';
+
+        // Ignore login/register errors so AuthPage can show them
+        if (url.includes('login') || url.includes('register')) {
+            return Promise.reject(error);
+        }
 
         // If Django says 401 Unauthorized, and we haven't already retried this request...
         if (error.response?.status === 401 && !originalRequest._retry) {
@@ -44,32 +50,41 @@ api.interceptors.response.use(
 
             try {
                 const refreshToken = getRefreshToken();
-                if (!refreshToken) throw new Error('No refresh token available');
+                if (!refreshToken || refreshToken === 'undefined') {
+                    throw new Error('No refresh token available');
+                }
 
+                // Prevent double slashes in the URL
+                const baseURL = api.defaults.baseURL?.replace(/\/$/, '') || '';
+                
                 // Ask Django for a new access token
                 const response = await axios.post(
-                    `${api.defaults.baseURL}/accounts/token/refresh/`, 
+                    `${baseURL}/accounts/login/refresh/`, 
                     { refresh: refreshToken }
                 );
 
                 const newAccessToken = response.data.access;
                 
+                // If Django SimpleJWT is configured to rotate tokens, it sends a new refresh. 
+                // Otherwise, we keep using the original one.
+                const newRefreshToken = response.data.refresh || refreshToken;
+                
                 // Save the new token
-                setTokens(newAccessToken, refreshToken);
+                setTokens(newAccessToken, newRefreshToken);
 
                 // Update the failed request with the new token and try again!
                 originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                 return api(originalRequest);
                 
             } catch (refreshError) {
-                // If the refresh token is also expired, log them out completely
                 clearTokens();
-                window.location.href = '/login'; // Force redirect to login page
+                localStorage.removeItem('user');
+                window.location.href = '/auth'; // Hard boot to login
                 return Promise.reject(refreshError);
             }
         }
 
-        // For all other errors (400, 403, 500), pass the error to the component
+        // For all other errors (400, 403, 500)
         return Promise.reject(error);
     }
 );

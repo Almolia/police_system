@@ -3,6 +3,51 @@ from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.db.models import Max, Min
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from evidence.models import Evidence
+
+# ═══════════════════════════════════════════════════════════════
+# 4. NOTIFICATIONS (The Alert System)
+# ═══════════════════════════════════════════════════════════════
+class Notification(models.Model):
+    class NotificationType(models.TextChoices):
+        EVIDENCE_ADDED    = 'EVIDENCE_ADDED', 'New Evidence Added'
+        SERGEANT_REJECTED = 'SERGEANT_REJECTED', 'Suspect Rejected'
+        SERGEANT_APPROVED = 'SERGEANT_APPROVED', 'Suspect Approved'
+
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
+    case = models.ForeignKey('cases.Case', on_delete=models.CASCADE, related_name='case_notifications', null=True, blank=True)
+    
+    notification_type = models.CharField(max_length=50, choices=NotificationType.choices)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"To {self.recipient.username}: {self.message[:20]}"
+
+# ─── AUTOMATIC SIGNAL FOR NEW EVIDENCE ───
+@receiver(post_save, sender=Evidence)
+def notify_detective_of_new_evidence(sender, instance, created, **kwargs):
+    """
+    Automatically triggers whenever ANY type of Evidence is created.
+    If the case has a Detective, and the Detective didn't upload it themselves, send an alert.
+    """
+    if created and instance.case and getattr(instance.case, 'assigned_detective', None):
+        detective = instance.case.assigned_detective
+        
+        # Don't notify the detective if they uploaded the evidence themselves
+        if instance.recorder != detective:
+            Notification.objects.create(
+                recipient=detective,
+                notification_type=Notification.NotificationType.EVIDENCE_ADDED,
+                case=instance.case,
+                message=f"New {instance.get_evidence_type_display()} evidence was added to Case #{instance.case.id} by {instance.recorder.get_full_name()}."
+            )
 
 # ═══════════════════════════════════════════════════════════════
 # 1. SUSPECTS (The Criminals)
@@ -137,6 +182,15 @@ class Interrogation(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    captain_reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, 
+        null=True, blank=True, related_name='captain_reviews'
+    )
+    chief_reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, 
+        null=True, blank=True, related_name='chief_reviews'
+    )
+
     class Meta:
         unique_together = ("case", "suspect")
 
@@ -163,6 +217,7 @@ class BoardNode(models.Model):
     x_position = models.FloatField(default=0.0)
     y_position = models.FloatField(default=0.0)
     color = models.CharField(max_length=20, default="#ffeb3b")
+    content = models.TextField(blank=True, null=True)
 
 class BoardConnection(models.Model):
     case = models.ForeignKey("cases.Case", on_delete=models.CASCADE)

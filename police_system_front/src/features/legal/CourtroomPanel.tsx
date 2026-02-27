@@ -20,7 +20,7 @@ export default function CourtroomPanel() {
     const [verdicts, setVerdicts] = useState<any[]>([]);
 
     // ─── VERDICT FORM STATE ───
-    const [interrogationId, setInterrogationId] = useState('');
+    const [caseId, setCaseId] = useState('');
     const [verdict, setVerdict] = useState('INNOCENT');
     const [sentenceType, setSentenceType] = useState('NONE');
     const [prisonMonths, setPrisonMonths] = useState('');
@@ -62,11 +62,11 @@ export default function CourtroomPanel() {
     };
 
     const handleOpenModal = () => {
-        if (!interrogationId) {
-            displayMessage("❌ Please enter an Interrogation ID first.");
+        if (!caseId) {
+            displayMessage("❌ Please enter a Case ID first.");
             return;
         }
-        setDossierId(interrogationId);
+        setDossierId(caseId);
         setIsModalOpen(true);
     };
 
@@ -75,21 +75,36 @@ export default function CourtroomPanel() {
         setIsLoading(true); setStatusMessage('');
 
         try {
-            const payload = {
-                interrogation: parseInt(interrogationId),
-                verdict,
-                sentence_type: sentenceType,
-                prison_months: prisonMonths ? parseInt(prisonMonths) : 0,
-                fine_amount: fineAmount ? parseInt(fineAmount) : 0,
-                title,
-                description
-            };
-
-            // Post restricted to Judge role
-            await api.post('legal/verdicts/', payload);
-            displayMessage('✅ Court Verdict Issued Successfully!');
+            // 1. Fetch all interrogations (suspects) tied to this Case
+            const intRes = await api.get(`investigation/interrogations/?case=${caseId}`);
+            const allInterrogations = intRes.data.results || intRes.data;
             
-            setInterrogationId(''); setTitle(''); setDescription('');
+            // 2. Filter out suspects the Sergeant rejected
+            const validSuspects = allInterrogations.filter((i: any) => i.sergeant_approval === true);
+
+            if (validSuspects.length === 0) {
+                displayMessage('❌ Error: This case has no Sergeant-approved suspects to sentence.');
+                setIsLoading(false);
+                return;
+            }
+
+            // 3. Issue the verdict for all valid suspects concurrently
+            await Promise.all(validSuspects.map((suspect: any) => {
+                const payload = {
+                    interrogation: suspect.id,
+                    verdict,
+                    sentence_type: sentenceType,
+                    prison_months: prisonMonths ? parseInt(prisonMonths) : 0,
+                    fine_amount: fineAmount ? parseInt(fineAmount) : 0,
+                    title,
+                    description
+                };
+                return api.post('legal/verdicts/', payload);
+            }));
+
+            displayMessage(`✅ Court Verdict Applied to ${validSuspects.length} Suspect(s)!`);
+            
+            setCaseId(''); setTitle(''); setDescription('');
             setPrisonMonths(''); setFineAmount('');
             setVerdict('INNOCENT'); setSentenceType('NONE');
             
@@ -103,8 +118,7 @@ export default function CourtroomPanel() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto p-6 mt-10 font-sans relative">
-            
+        <div className="h-full w-full flex flex-col font-sans relative bg-white">    
             {/* ─── FLOATING TOAST ALERT ─── */}
             {statusMessage && (
                 <div className={`fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg font-bold shadow-2xl z-50 transition-all duration-300 ${statusMessage.includes('❌') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
@@ -147,9 +161,9 @@ export default function CourtroomPanel() {
                 </div>
             )}
 
-            {/* ─── MAIN PANEL ─── */}
-            <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-x-hidden overflow-y-auto">
-                <div className="bg-slate-800 p-6 border-b border-slate-900">
+                {/* ─── MAIN PANEL ─── */}
+                <div className="flex flex-col h-full overflow-x-hidden overflow-y-auto">
+                    <div className="bg-slate-800 p-6 border-b border-slate-900">
                     <h2 className="text-3xl font-black text-white flex items-center gap-3">
                         🏛️ The Courtroom
                     </h2>
@@ -182,15 +196,15 @@ export default function CourtroomPanel() {
                             {/* Target Interrogation + Modal Trigger */}
                             <div className="p-5 bg-slate-50 rounded-lg border border-slate-200 shadow-inner flex flex-col md:flex-row gap-4 items-end">
                                 <div className="flex-1 w-full">
-                                    <label className="block text-sm font-bold text-slate-700 mb-2">Target Interrogation ID</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full p-3 border rounded shadow-sm focus:ring-2 focus:ring-red-500 font-mono text-lg" 
-                                        placeholder="Enter ID..." 
-                                        value={interrogationId} 
-                                        onChange={(e) => setInterrogationId(e.target.value)} 
-                                        required 
-                                    />
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Target Case ID</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-3 border rounded shadow-sm focus:ring-2 focus:ring-red-500 font-mono text-lg" 
+                                    placeholder="Enter Case ID..." 
+                                    value={caseId} 
+                                    onChange={(e) => setCaseId(e.target.value)} 
+                                    required 
+                                />
                                 </div>
                                 <button 
                                     type="button" 

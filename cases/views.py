@@ -1,9 +1,9 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Case, CaseStatus, CaseStatusLog
+from .models import Case, CaseStatus, CaseStatusLog, CaseComplainant
 from .serializers import CaseSerializer, CaseReviewSerializer
-from .permissions import IsCadet, IsOfficer, IsSuperior
+from .permissions import IsCadet, IsOfficer, IsSuperior, IsCitizen
 
 class CaseViewSet(viewsets.ModelViewSet):
     queryset = Case.objects.all()
@@ -76,3 +76,37 @@ class CaseViewSet(viewsets.ModelViewSet):
             self._log_status(case, old_status, case.status, serializer.validated_data['message'])
 
         return Response({"status": case.status})
+
+    @action(detail=True, methods=['post'], permission_classes=[IsCitizen])
+    def join_as_complainant(self, request, pk=None):
+        """Allows a citizen to attach themselves as a victim/complainant to an existing public case."""
+        case = self.get_object()
+        user = request.user
+
+        # 1. Rule: Citizens can only join cases that are actively OPEN
+        if case.status != CaseStatus.OPEN:
+            return Response(
+                {"error": "You can only file complaints on active, open cases."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Rule: Prevent duplicates (Fix: Changed 'complainant' to 'user' based on your model)
+        is_primary = case.primary_complainant == user
+        is_secondary = CaseComplainant.objects.filter(case=case, user=user).exists()
+        
+        if is_primary or is_secondary:
+            return Response(
+                {"error": "You are already registered as a complainant for this case."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Create the linkage (Fix: Changed 'complainant' to 'user')
+        CaseComplainant.objects.create(case=case, user=user)
+
+        # 4. Audit Log
+        self._log_status(case, case.status, case.status, f"Citizen {user.national_id} joined as an additional complainant.")
+
+        return Response(
+            {"message": "Successfully registered as an additional complainant."}, 
+            status=status.HTTP_201_CREATED
+        )

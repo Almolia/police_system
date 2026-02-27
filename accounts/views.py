@@ -8,6 +8,7 @@ from .serializers import (
     StaffCreationSerializer
 )
 from .permissions import IsChief
+from .models import Role
 
 User = get_user_model()
 
@@ -144,3 +145,14 @@ class StaffListView(generics.ListAPIView):
     queryset = User.objects.exclude(role__codename='CITIZEN').select_related('role')
     serializer_class = UserProfileSerializer
     permission_classes = [IsChief]
+
+class AdminUserManagementView(generics.RetrieveUpdateAPIView):
+    """Allows an Admin to change a user's role."""
+    queryset = User.objects.all()
+    serializer_class = UserProfileSerializer
+    permission_classes = [permissions.IsAuthenticated, IsChief] 
+
+class RoleListView(generics.ListAPIView):
+    """Returns all roles so the React Admin dropdown can populate."""
+    queryset = Role.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsChief]

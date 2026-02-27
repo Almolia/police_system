@@ -69,7 +69,7 @@ export default function CoronerPanel() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto p-6 mt-10 font-sans relative">
+        <div className="h-full w-full flex flex-col font-sans relative bg-slate-50">
             
             {statusMessage && (
                 <div className={`fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg font-bold shadow-2xl z-50 ${statusMessage.includes('❌') ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
@@ -77,7 +77,7 @@ export default function CoronerPanel() {
                 </div>
             )}
 
-            <div className="bg-slate-900 p-6 rounded-t-xl border-b-4 border-teal-500 flex justify-between items-center shadow-lg">
+            <div className="bg-slate-900 p-6 border-b-4 border-teal-500 flex justify-between items-center shrink-0">
                 <div>
                     <h2 className="text-3xl font-black text-white uppercase tracking-tighter">🔬 Forensics Lab</h2>
                 </div>
@@ -97,7 +97,7 @@ export default function CoronerPanel() {
                 </button>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-6 mt-6">
+            <div className="flex flex-col md:flex-row gap-6 p-6 flex-grow overflow-y-auto">
                 
                 {/* ─── LEFT PANE: LIST ─── */}
                 <div className="w-full md:w-1/3 flex flex-col gap-4">

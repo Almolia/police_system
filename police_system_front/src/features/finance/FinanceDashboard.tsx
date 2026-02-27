@@ -136,7 +136,7 @@ export default function FinanceDashboard() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto p-6 mt-10 font-sans relative">
+        <div className="h-full w-full flex flex-col font-sans relative p-6 overflow-x-hidden overflow-y-auto bg-slate-50/50">
             
             {/* ─── FLOATING ALERT MESSAGE ─── */}
             {statusMessage && (

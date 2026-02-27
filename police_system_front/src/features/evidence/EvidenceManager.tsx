@@ -137,7 +137,7 @@ export default function EvidenceManager() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto p-6 mt-10 font-sans">
+        <div className="bg-slate-950 overflow-y-auto max-w-6xl mx-auto w-full bg-white rounded-2xl shadow-2xl h-full overflow-x-hidden overflow-y-auto border-2 border-slate-300">
             
             {/* ─── REGISTRATION FORM (Restricted to Police) ─── */}
             {isPolice && (
@@ -287,6 +287,28 @@ export default function EvidenceManager() {
                 <h2 className="text-2xl font-black text-gray-800 mb-6 border-b-4 border-slate-800 pb-2 inline-block">
                     Archive Review
                 </h2>
+
+                <div className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-xl shadow-inner">
+                    <label className="flex flex-col font-bold text-gray-700">
+                        <span className="mb-2 uppercase tracking-wider text-sm text-blue-900">Select Target Case Archive:</span>
+                        {isLoadingCases ? (
+                            <div className="h-10 w-full animate-pulse bg-gray-200 rounded" />
+                        ) : (
+                            <select 
+                                className="p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-slate-800 font-bold shadow-sm"
+                                value={selectedCaseId} 
+                                onChange={(e) => setSelectedCaseId(e.target.value)}
+                            >
+                                <option value="">-- Select a Case to view its Evidence --</option>
+                                {availableCases.map((c: any) => (
+                                    <option key={c.id} value={c.id}>Case #{c.id}: {c.title}</option>
+                                ))}
+                            </select>
+                        )}
+                    </label>
+                </div>
+
+                {/* List renders automatically once selectedCaseId is populated */}
                 <EvidenceList caseId={selectedCaseId} />
             </div>
         </div>

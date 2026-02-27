@@ -115,6 +115,15 @@ class TipDetailView(generics.UpdateAPIView):
         elif role_code == 'DETECTIVE':
             serializer.save(detective_approver=self.request.user)
 
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'is_anonymous', True):
+            return Tip.objects.none()
+
+        if user.role.codename == 'CITIZEN':
+            return Tip.objects.filter(submitted_by=user)
+        return Tip.objects.all()
+
 
 class TipVerificationView(APIView):
     """POST /tip-verifications/ - Noun-based endpoint to verify a reward code."""
