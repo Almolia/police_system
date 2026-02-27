@@ -129,7 +129,7 @@ export default function CoronerPanel() {
                             <p className="text-slate-400 font-medium">Select a sample to review.</p>
                         </div>
                     ) : selectedItem && (
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col h-full">
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-x-hidden overflow-y-auto flex flex-col h-full">
                             <div className="p-8 grow">
                                 <h2 className="text-2xl font-black text-slate-900 mb-6">{selectedItem.title}</h2>
                                 

@@ -115,7 +115,7 @@ export default function CourtroomPanel() {
             {/* ─── FULL SCREEN DOSSIER MODAL ─── */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8 transition-opacity">
-                    <div className="bg-slate-200 w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border-2 border-slate-700 relative">
+                    <div className="bg-slate-200 w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-x-hidden overflow-y-auto border-2 border-slate-700 relative">
                         {/* Modal Header */}
                         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">
                             <h2 className="text-xl font-black text-white tracking-widest uppercase">
@@ -148,7 +148,7 @@ export default function CourtroomPanel() {
             )}
 
             {/* ─── MAIN PANEL ─── */}
-            <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-x-hidden overflow-y-auto">
                 <div className="bg-slate-800 p-6 border-b border-slate-900">
                     <h2 className="text-3xl font-black text-white flex items-center gap-3">
                         🏛️ The Courtroom
@@ -263,7 +263,7 @@ export default function CourtroomPanel() {
                     <div className="p-6 bg-slate-50">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {verdicts.map(v => (
-                                <div key={v.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 relative overflow-hidden">
+                                <div key={v.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 relative overflow-x-hidden overflow-y-auto">
                                     <div className={`absolute top-0 left-0 w-1.5 h-full ${v.verdict === 'GUILTY' ? 'bg-red-600' : 'bg-green-500'}`}></div>
                                     
                                     <div className="pl-3 text-slate-900">

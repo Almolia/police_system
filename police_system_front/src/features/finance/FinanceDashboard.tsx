@@ -199,7 +199,7 @@ export default function FinanceDashboard() {
             <div className="grid grid-cols-1 gap-8">
                 
                 {/* TIPS TABLE */}
-                <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-x-hidden overflow-y-auto">
                     <div className="bg-blue-900 text-white p-4 font-bold text-lg flex items-center gap-2">
                         📋 Tip & Reward Records
                     </div>
@@ -250,7 +250,7 @@ export default function FinanceDashboard() {
                 </div>
 
                 {/* RELEASE REQUESTS TABLE */}
-                <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-x-hidden overflow-y-auto">
                     <div className="bg-yellow-600 text-white p-4 font-bold text-lg flex items-center gap-2">
                         ⚖️ Release Requests & Bail
                     </div>

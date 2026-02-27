@@ -15,6 +15,7 @@ import FinanceDashboard from './features/finance/FinanceDashboard';
 import PaymentCallback from './features/finance/PaymentCallback';
 import CourtroomPanel from './features/legal/CourtroomPanel';
 import CoronerPanel from './features/evidence/CoronerPanel';
+import InvestigationPanel from './features/investigation/InvestigationPanel';
 
 // ─── PROTECTED ROUTE LOGIC ───
 function ProtectedRoute({ children, roles }: { children: React.ReactNode, roles?: string[] }) {
@@ -41,6 +42,7 @@ function NavLinks() {
 
     // Roles allowed to access the Coroner Lab
     const isCoronerStaff = ['DETECTIVE', 'CAPTAIN', 'CHIEF'].includes(user?.role || '');
+    const isInvestigator = ['DETECTIVE', 'SERGEANT', 'CAPTAIN', 'CHIEF'].includes(user?.role || '');
 
     return (
         <nav className="bg-slate-900/90 backdrop-blur-md shadow-lg p-4 sticky top-0 z-50 border-b border-blue-500/30">
@@ -52,7 +54,6 @@ function NavLinks() {
                         </Link>
                     )}
                     
-                    {/* ─── NEW: Add link to the Coroner Lab ─── */}
                     {isCoronerStaff && (
                         <Link to="/coroner" className={location.pathname === '/coroner' ? activeClass : inactiveClass}>
                             Forensics Lab
@@ -61,6 +62,15 @@ function NavLinks() {
 
                     <Link to="/finance" className={location.pathname === '/finance' ? activeClass : inactiveClass}>Finance</Link>
                     <Link to="/court" className={location.pathname === '/court' ? activeClass : inactiveClass}>Courtroom</Link>
+               
+                    {isInvestigator && (
+                      <Link 
+                          to="/investigation" 
+                          className={location.pathname === '/investigation' ? activeClass : inactiveClass}
+                      >
+                          Investigation Board
+                      </Link>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-6">
@@ -108,9 +118,10 @@ function AppContent() {
     }, []);
 
     return (
-        <div ref={vantaRef} className="min-h-screen font-sans overflow-auto bg-slate-900">
+      <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-x-hidden overflow-y-auto">
             {token && <NavLinks />}
 
+          <main className="flex-grow overflow-x-hidden overflow-y-auto relative">
             <div className="p-6 relative z-10">
                 <Routes>
                     <Route path="/auth" element={token ? <Navigate to="/" replace /> : <AuthPage />} />
@@ -121,7 +132,6 @@ function AppContent() {
                         </ProtectedRoute>
                     } />
                     
-                    {/* ─── NEW: Protected Route for Forensics/Coroner ─── */}
                     <Route path="/coroner" element={
                         <ProtectedRoute roles={['DETECTIVE', 'CAPTAIN', 'CHIEF']}>
                             <CoronerPanel />
@@ -131,10 +141,17 @@ function AppContent() {
                     <Route path="/finance" element={<ProtectedRoute><FinanceDashboard /></ProtectedRoute>} />
                     <Route path="/court" element={<ProtectedRoute><CourtroomPanel /></ProtectedRoute>} />
                     <Route path="/payment-callback" element={<PaymentCallback />} />
+
+                    <Route path="/investigation" element={
+                        <ProtectedRoute roles={['DETECTIVE', 'SERGEANT', 'CAPTAIN', 'CHIEF']}>
+                            <InvestigationPanel />
+                        </ProtectedRoute>
+                    } />
                     
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </div>
+            </main>
         </div>
     );
 }

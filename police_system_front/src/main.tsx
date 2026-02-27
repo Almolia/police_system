@@ -7,7 +7,12 @@ import { AuthProvider } from './context/AuthContext.tsx';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      {/* h-screen + overflow-hidden: Enforces a single-window fit.
+          pb-12: Creates the mandatory bottom margin.
+      */}
+      <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden pb-12 box-border relative">
+        <App />
+      </div>
     </AuthProvider>
   </StrictMode>,
 )
