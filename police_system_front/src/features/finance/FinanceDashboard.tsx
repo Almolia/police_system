@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function FinanceDashboard() {
-    // ─── DEV SIMULATOR (Replace with actual Auth Context later) ───
-    const [userRole, setUserRole] = useState<'CITIZEN' | 'OFFICER' | 'SERGEANT' | 'DETECTIVE'>('CITIZEN');
+    // ─── AUTH CONTEXT ───
+    const { user, devSwitchRole } = useAuth();
 
     const [activeTab, setActiveTab] = useState<'TIP' | 'RELEASE' | 'PAY'>('TIP');
     
@@ -53,10 +54,10 @@ export default function FinanceDashboard() {
         }
     };
 
-    // Fetch on mount and when role changes (for testing)
+    // Fetch on mount and when role changes
     useEffect(() => {
         fetchRecords();
-    }, [userRole]);
+    }, [user?.role]);
 
     const handleError = (error: any) => {
         if (error.response?.status === 401 || error.response?.status === 403) {
@@ -144,20 +145,8 @@ export default function FinanceDashboard() {
                 </div>
             )}
 
-            {/* ─── DEV SIMULATOR ─── */}
-            <div className="mb-6 p-4 bg-purple-100 border border-purple-300 rounded-lg flex items-center gap-4 shadow-sm">
-                <span className="font-bold text-purple-800">🛠️ Dev Role Simulator:</span>
-                <select className="p-2 border border-purple-300 rounded font-bold text-purple-900 bg-white focus:ring-2 focus:ring-purple-500" value={userRole} onChange={(e: any) => setUserRole(e.target.value)}>
-                    <option value="CITIZEN">Citizen (Submitters & Payers)</option>
-                    <option value="OFFICER">Officer (Forwards Tips)</option>
-                    <option value="DETECTIVE">Detective (Approves Tips)</option>
-                    <option value="SERGEANT">Sergeant (Sets Bail Amounts)</option>
-                </select>
-                <span className="text-sm text-purple-600 font-medium">Changes UI to match what this user should see.</span>
-            </div>
-
             {/* ─── ACTION PANELS (Only Citizens need to submit forms) ─── */}
-            {userRole === 'CITIZEN' && (
+            {user?.role === 'CITIZEN' && (
                 <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-6 mb-8">
                     <h2 className="text-2xl font-black text-gray-800 mb-6 border-b pb-4">💸 Citizen Finance Portal</h2>
                     
@@ -223,7 +212,7 @@ export default function FinanceDashboard() {
                                     <th className="p-3">Status</th>
                                     <th className="p-3">Reward Amount</th>
                                     <th className="p-3">Tracking UUID</th>
-                                    {userRole !== 'CITIZEN' && <th className="p-3">Actions</th>}
+                                    {user?.role !== 'CITIZEN' && <th className="p-3">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -240,13 +229,13 @@ export default function FinanceDashboard() {
                                         <td className="p-3 text-xs font-mono text-gray-400 truncate max-w-[150px]" title={tip.unique_tracking_id}>{tip.unique_tracking_id || 'Not generated yet'}</td>
                                         
                                         {/* Role-Based Police Actions */}
-                                        {userRole === 'OFFICER' && tip.status === 'PENDING' && (
+                                        {user?.role === 'OFFICER' && tip.status === 'PENDING' && (
                                             <td className="p-3 flex gap-2">
                                                 <button onClick={() => handleUpdateTip(tip.id, 'FORWARDED')} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded transition-colors">Forward</button>
                                                 <button onClick={() => handleUpdateTip(tip.id, 'REJECTED')} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors">Reject</button>
                                             </td>
                                         )}
-                                        {userRole === 'DETECTIVE' && tip.status === 'FORWARDED' && (
+                                        {user?.role === 'DETECTIVE' && tip.status === 'FORWARDED' && (
                                             <td className="p-3 flex gap-2">
                                                 <button onClick={() => handleUpdateTip(tip.id, 'APPROVED')} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded transition-colors">Approve & Generate UUID</button>
                                                 <button onClick={() => handleUpdateTip(tip.id, 'REJECTED')} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors">Reject</button>
@@ -274,7 +263,7 @@ export default function FinanceDashboard() {
                                     <th className="p-3">Status</th>
                                     <th className="p-3 text-center">Bail (Paid / Total)</th>
                                     <th className="p-3 text-center">Fine (Paid / Total)</th>
-                                    {userRole === 'SERGEANT' && <th className="p-3">Sergeant Actions</th>}
+                                    {user?.role === 'SERGEANT' && <th className="p-3">Sergeant Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -317,7 +306,7 @@ export default function FinanceDashboard() {
                                             </td>
                                             
                                             {/* Sergeant Actions */}
-                                            {userRole === 'SERGEANT' && req.status === 'PENDING' && (
+                                            {user?.role === 'SERGEANT' && req.status === 'PENDING' && (
                                                 <td className="p-3">
                                                     {editingReleaseId === req.id ? (
                                                         <div className="flex flex-col gap-2 bg-yellow-50 p-2 rounded border border-yellow-200 shadow-inner">
